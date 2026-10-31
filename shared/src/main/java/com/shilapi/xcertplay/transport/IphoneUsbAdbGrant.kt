@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay.transport
 
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.hardware.usb.UsbDevice
@@ -138,7 +140,7 @@ object IphoneUsbGrantTool {
             )) {
             return IphoneUsbAdbGrant.Result(IphoneUsbAdbGrant.Code.DENIED)
         }
-        val usb = context.getSystemService(UsbManager::class.java)
+        val usb = context.getSystemServiceCompat(UsbManager::class.java)
             ?: return IphoneUsbAdbGrant.Result(IphoneUsbAdbGrant.Code.UNSUPPORTED)
         val devices = usb.deviceList.values
             .filter { it.vendorId == vendorId && it.productId == productId }

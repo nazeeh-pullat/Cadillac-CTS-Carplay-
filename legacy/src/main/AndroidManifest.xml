@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <application android:label="DiPlay" android:icon="@drawable/ic_launcher_cadillac" android:theme="@style/TabletTheme"
+        android:allowBackup="false" android:supportsRtl="true" android:usesCleartextTraffic="true">
+        <!-- Removal directives are not runtime registrations; these services are absent from the merged APK. -->
+        <service android:name="com.shilapi.xcertplay.shared.MyCarAppService" tools:node="remove" tools:ignore="MissingClass" />
+        <service android:name="com.shilapi.xcertplay.telecom.PhoneAudioConnectionService" tools:node="remove" tools:ignore="NewApi" />
+        <meta-data android:name="androidx.car.app.minCarApiLevel" tools:node="remove" />
+        <activity android:name=".LegacyActivity" android:exported="true" android:screenOrientation="landscape" android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

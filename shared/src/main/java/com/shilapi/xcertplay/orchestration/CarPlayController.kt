@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay.orchestration
 
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
+
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothA2dp
@@ -188,9 +190,9 @@ class CarPlayController(
     private val appContext = context.applicationContext
     private val diagnosticAttempt = diagnosticAttempts.incrementAndGet()
     private val diagnosticRun = AtomicInteger()
-    private val usbManager: UsbManager? = context.getSystemService(UsbManager::class.java)
+    private val usbManager: UsbManager? = context.getSystemServiceCompat(UsbManager::class.java)
     private fun currentBluetoothAdapter(): BluetoothAdapter? =
-        runCatching { appContext.getSystemService(BluetoothManager::class.java)?.adapter }
+        runCatching { appContext.getSystemServiceCompat(BluetoothManager::class.java)?.adapter }
             .getOrNull() ?: runCatching { BluetoothAdapter.getDefaultAdapter() }.getOrNull()
 
     private fun awaitBluetoothEnabled(adapter: BluetoothAdapter, timeoutMillis: Long = 3_000L): Boolean {
@@ -1490,7 +1492,10 @@ class CarPlayController(
                 // Bind discovery and its connect probe to the same AP/address family as AirPlay.
                 // The car hotspot previously used system NSD, which could resolve another interface
                 // or IPv6 while the listener/probe was bound to the AP's IPv4 address.
-                useInterfaceMdns = true,
+                // Lollipop's multicast socket binding can reject a second mDNS listener
+                // with EADDRINUSE. On an existing LAN, platform NSD can share the
+                // system responder and still use the advertised address for probes.
+                useInterfaceMdns = useInterfaceMdnsForWireless(Build.VERSION.SDK_INT, hotspotInfo.backend),
                 onEvent = { event -> debugLog("wireless bonjour: ${event.diagnosticSummary()}") },
                 additionalAddresses = hotspotInfo.hostAddresses.filter { it != hostAddress },
             )
@@ -1502,7 +1507,7 @@ class CarPlayController(
             }
             startedBonjour = bonjourClient
             diagnostics.start()
-            debugLog("wireless Bonjour services started mode=interface iface=${hotspotInfo.interfaceName ?: "unknown"}")
+            debugLog("wireless Bonjour services started mode=${if (useInterfaceMdnsForWireless(Build.VERSION.SDK_INT, hotspotInfo.backend)) "interface" else "platform"} iface=${hotspotInfo.interfaceName ?: "unknown"}")
             if (isStaleWirelessRun(generation)) {
                 return
             }

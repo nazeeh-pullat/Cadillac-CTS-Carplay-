@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay.network
 
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
+
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.wifi.SoftApConfiguration
@@ -31,8 +33,8 @@ import java.util.concurrent.TimeUnit
 @RequiresApi(Build.VERSION_CODES.O)
 class LocalOnlyHotspotManager(context: Context, private val onDiagnostic: (String) -> Unit = {}) : WirelessHotspotManager {
     private val connectivityManager =
-        context.applicationContext.getSystemService(ConnectivityManager::class.java)
-    private val wifiManager = context.applicationContext.getSystemService(WifiManager::class.java)
+        context.applicationContext.getSystemServiceCompat(ConnectivityManager::class.java)
+    private val wifiManager = context.applicationContext.getSystemServiceCompat(WifiManager::class.java)
         ?: throw IllegalStateException("WifiManager is unavailable")
     private val stateLock = Object()
 

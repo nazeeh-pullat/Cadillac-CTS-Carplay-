@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay.telecom
 
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
+
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
@@ -35,7 +37,7 @@ internal class TelecomPhoneAudioBackend(private val context: Context) : PhoneAud
 
     @RequiresApi(Build.VERSION_CODES.O)
     private fun place(): Boolean {
-        val telecom = context.getSystemService(TelecomManager::class.java) ?: return false
+        val telecom = context.getSystemServiceCompat(TelecomManager::class.java) ?: return false
         val handle = PhoneAccountHandle(ComponentName(context, PhoneAudioConnectionService::class.java), ACCOUNT_ID)
         return try {
             telecom.registerPhoneAccount(

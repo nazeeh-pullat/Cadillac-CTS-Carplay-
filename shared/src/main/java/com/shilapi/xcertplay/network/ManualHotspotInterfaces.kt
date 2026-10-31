@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay.network
 
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.net.ConnectivityManager
@@ -20,13 +22,13 @@ internal class ManualHotspotInterfaces(
     private val onDiagnostic: (String) -> Unit = {},
     private val configuredInterface: String? = null,
 ) : Closeable {
-    private val connectivity = context.getSystemService(ConnectivityManager::class.java)
+    private val connectivity = context.getSystemServiceCompat(ConnectivityManager::class.java)
     private val publicTethering = if (Build.VERSION.SDK_INT >= 36) PublicTethering(context) else null
     private var lastLegacyDiagnostic: String? = null
     private var lastOwnershipDiagnostic: String? = null
 
     fun sample(): HotspotNetworkSnapshot {
-        val before = runCatching { connectivity?.activeNetwork }
+        val before = runCatching { activeNetworkCompat() }
         val upstreams = runCatching {
             checkNotNull(connectivity)
             connectivity.allNetworks.mapNotNull { network ->
@@ -56,12 +58,22 @@ internal class ManualHotspotInterfaces(
             upstreams = upstreams,
             defaultInterface = defaultName,
         )
-        val after = runCatching { connectivity?.activeNetwork }
+        val after = runCatching { activeNetworkCompat() }
         return HotspotNetworkSnapshot(
             interfaces, ap, upstreams, defaultName,
             consistent = before.isSuccess && after.isSuccess && before.getOrNull() == after.getOrNull(),
             apEnabled = apEnabled,
         )
+    }
+
+    @Suppress("DEPRECATION")
+    private fun activeNetworkCompat(): android.net.Network? {
+        val manager = connectivity ?: return null
+        if (Build.VERSION.SDK_INT >= 23) return manager.activeNetwork
+        val active = manager.activeNetworkInfo ?: return null
+        return manager.allNetworks.firstOrNull {
+            manager.getNetworkInfo(it)?.let { info -> info.isConnected && info.type == active.type } == true
+        }
     }
 
     /**
@@ -156,7 +168,7 @@ internal class ManualHotspotInterfaces(
     private class PublicTethering(context: Context) : Closeable {
         @Volatile var interfaces: Set<String>? = null
             private set
-        private val manager = context.getSystemService(TetheringManager::class.java)
+        private val manager = context.getSystemServiceCompat(TetheringManager::class.java)
         private val callback = object : TetheringManager.TetheringEventCallback {
             override fun onTetheredInterfacesChanged(interfaces: Set<TetheringInterface>) {
                 this@PublicTethering.interfaces = interfaces.filter { it.type == TetheringManager.TETHERING_WIFI }

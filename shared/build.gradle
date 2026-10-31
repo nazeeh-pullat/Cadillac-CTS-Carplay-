@@ -1,22 +1,24 @@
 plugins {
     id 'com.android.library'
 }
+def legacyAndroid51 = providers.gradleProperty('legacyAndroid51').map { it.toBoolean() }.getOrElse(false)
 android {
     namespace = 'com.shilapi.xcertplay.shared'
     compileSdk = 37
 
     defaultConfig {
-        minSdk = 24
+        minSdk = legacyAndroid51 ? 22 : 24
         consumerProguardFiles 'ambient-consumer-rules.pro'
         targetSdk = 37
 
         ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+            if (legacyAndroid51) { abiFilters 'armeabi-v7a' }
+            else { abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64' }
         }
 
         externalNativeBuild {
             ndkBuild {
-                arguments 'APP_PLATFORM=android-24'
+                arguments legacyAndroid51 ? 'APP_PLATFORM=android-22' : 'APP_PLATFORM=android-24'
             }
         }
 
@@ -33,12 +35,18 @@ android {
         aidl true
     }
     compileOptions {
+        coreLibraryDesugaringEnabled legacyAndroid51
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    if (legacyAndroid51) {
+        sourceSets.main.kotlin.exclude 'com/shilapi/xcertplay/shared/MyCarApp*.kt'
+    }
 }
 dependencies {
-    implementation libs.androidx.app
+    if (!legacyAndroid51) { implementation libs.androidx.app }
+    implementation 'androidx.annotation:annotation:1.9.1'
+    if (legacyAndroid51) { coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5' }
     implementation libs.bouncycastle
     implementation libs.jmdns
     testImplementation libs.junit

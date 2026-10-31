@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay.hud
 
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
+
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
@@ -124,7 +126,7 @@ object BydBluetoothSuspend {
     }
 
     private fun radioEnabled(context: Context): Boolean? = runCatching {
-        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
+        val adapter = context.getSystemServiceCompat(BluetoothManager::class.java)?.adapter
             ?: BluetoothAdapter.getDefaultAdapter() ?: return@runCatching null
         when (adapter.state) {
             BluetoothAdapter.STATE_ON -> true

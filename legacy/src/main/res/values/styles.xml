@@ -1,0 +1,7 @@
+<resources>
+    <style name="TabletTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#080A0C</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:colorAccent">#C4B28B</item>
+    </style>
+</resources>
