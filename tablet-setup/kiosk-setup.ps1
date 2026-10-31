@@ -54,6 +54,9 @@ if (-not $devices) { throw 'No authorised device found. Connect the tablet and a
 $settings = @(
   @{ Namespace = 'global'; Key = 'policy_control' },
   @{ Namespace = 'global'; Key = 'heads_up_notifications_enabled' },
+  @{ Namespace = 'global'; Key = 'window_animation_scale' },
+  @{ Namespace = 'global'; Key = 'transition_animation_scale' },
+  @{ Namespace = 'global'; Key = 'animator_duration_scale' },
   @{ Namespace = 'secure'; Key = 'lockscreen.disabled' },
   @{ Namespace = 'secure'; Key = 'lock_screen_show_notifications' },
   @{ Namespace = 'secure'; Key = 'lock_screen_allow_private_notifications' }
@@ -75,10 +78,12 @@ Invoke-Adb @('shell','settings','put','global','policy_control','immersive.full=
 Invoke-Adb @('shell','settings','put','secure','lockscreen.disabled','1')
 Invoke-Adb @('shell','settings','put','secure','lock_screen_show_notifications','0')
 Invoke-Adb @('shell','settings','put','secure','lock_screen_allow_private_notifications','0')
-# 3. No heads-up pop-ups.
+# 3. System animations off, so Android itself feels quicker.
+foreach ($key in 'window_animation_scale','transition_animation_scale','animator_duration_scale') { Invoke-Adb @('shell','settings','put','global',$key,'0') }
+# 4. No heads-up pop-ups.
 Invoke-Adb @('shell','settings','put','global','heads_up_notifications_enabled','0')
 
-# 4. Hide apps and services the dashboard does not need (reversible).
+# 5. Hide apps and services the dashboard does not need (reversible).
 $installed = (Invoke-Adb @('shell','pm','list','packages')) | ForEach-Object { $_ -replace '^package:','' -replace '\s','' }
 foreach ($package in $packages) {
     if ($installed -notcontains $package) { continue }

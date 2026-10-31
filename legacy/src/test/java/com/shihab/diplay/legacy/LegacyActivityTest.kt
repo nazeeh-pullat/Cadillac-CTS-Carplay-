@@ -66,6 +66,8 @@ class LegacyActivityTest {
             activity.setCarPlayActive(true)
             assertTrue(controls.none { it.isShown })
             assertEquals("Return to iPhone", controls.first { it.contentDescription?.toString()?.endsWith("to iPhone") == true }.contentDescription.toString())
+            val disconnect = icons(activity.window.decorView).single { it.contentDescription == "Disconnect" }
+            assertEquals(View.VISIBLE, disconnect.visibility)
             val root = activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as ViewGroup
             val video = root.getChildAt(0) as SurfaceView
             assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, video.layoutParams.width)
@@ -81,6 +83,7 @@ class LegacyActivityTest {
             assertTrue(controls.none { it.isShown })
             activity.setCarPlayActive(false)
             assertTrue(controls.single { it.contentDescription == "Connect to iPhone" }.isShown)
+            assertEquals(View.GONE, disconnect.visibility)
             assertFalse(controls.single { it.text == "Return to CarPlay" }.isShown)
         } finally { host.pause().stop().destroy() }
     }

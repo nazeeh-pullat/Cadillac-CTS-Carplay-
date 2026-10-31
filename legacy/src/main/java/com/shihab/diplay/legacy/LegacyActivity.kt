@@ -59,6 +59,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var home: View
     private lateinit var settingsPage: View
     private lateinit var connectButton: Button
+    private lateinit var disconnectButton: ImageButton
     private var settingsOpen = false
     private var directHotspot = true
     private var carPlayActive = false
@@ -88,7 +89,11 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         root.addView(dashboard, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
         enterImmersiveMode()
-        if (state == null) showSplash(root)
+        if (state == null) {
+            val startup = StartupModes.get(getSharedPreferences("legacy", MODE_PRIVATE))
+            val ready = startPreparation()
+            if (startup.playsAnimation) showSplash(root, startup, ready)
+        }
         if (Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT) {
                 if (!toggleCarPlayControls()) finish()
@@ -130,8 +135,22 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
             }
             background = RippleDrawable(ColorStateList.valueOf(0x33806b3c), champagne, null)
         }
-        val buttonWidth = minOf(CONNECT_WIDTH, resources.configuration.screenWidthDp - PAGE_PADDING * 2)
-        hero.addView(connectButton, LinearLayout.LayoutParams(dp(buttonWidth), -2).apply { topMargin = dp(HERO_ACTION_GAP) })
+        disconnectButton = ImageButton(this).apply {
+            setImageResource(R.drawable.ic_power); contentDescription = "Disconnect"
+            scaleType = ImageView.ScaleType.FIT_CENTER; setPadding(dp(30), dp(30), dp(30), dp(30))
+            val red = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xffd72a45.toInt(), 0xffa80d27.toInt())).apply {
+                cornerRadius = dp(CARD_RADIUS).toFloat(); setStroke(dp(1), 0xffe5566b.toInt())
+            }
+            background = RippleDrawable(ColorStateList.valueOf(0x44ffffff), red, null)
+            visibility = View.GONE
+            setOnClickListener { stopConnection(); showStatus("Disconnected. Ready when you are.") }
+        }
+        val gap = dp(BLOCK_GAP)
+        val buttonWidth = minOf(CONNECT_WIDTH, resources.configuration.screenWidthDp - PAGE_PADDING * 2 - CONNECT_HEIGHT - BLOCK_GAP)
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        actions.addView(connectButton, LinearLayout.LayoutParams(dp(buttonWidth), -2))
+        actions.addView(disconnectButton, LinearLayout.LayoutParams(dp(CONNECT_HEIGHT), dp(CONNECT_HEIGHT)).apply { marginStart = gap })
+        hero.addView(actions, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(HERO_ACTION_GAP) })
         (home as FrameLayout).addView(hero, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         (home as FrameLayout).addView(CadillacLineView(this), FrameLayout.LayoutParams(-1, dp(LINE_HEIGHT), Gravity.BOTTOM).apply { bottomMargin = dp(LINE_MARGIN) })
         settingsPage = createSettingsContent().apply { visibility = View.GONE }
@@ -162,13 +181,18 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         home.visibility = View.VISIBLE
     }
 
-    private fun showSplash(root: FrameLayout) {
+    /** Prepares authentication off the main thread; returns a flag that turns true when it is done. */
+    private fun startPreparation(): java.util.concurrent.atomic.AtomicBoolean {
         val ready = java.util.concurrent.atomic.AtomicBoolean(false)
         Thread({
             try { installAuthentication(); if (!destroyed) loadIdentity() }
             catch (error: Throwable) { diagnostic("Startup preparation: ${error.javaClass.simpleName}") }
             finally { ready.set(true) }
         }, "DiPlay-startup").start()
+        return ready
+    }
+
+    private fun showSplash(root: FrameLayout, startup: StartupAnimation, ready: java.util.concurrent.atomic.AtomicBoolean) {
         val animation = SplashAnimationView(this)
         val splash = FrameLayout(this).apply {
             setBackgroundColor(Color.BLACK); isClickable = true
@@ -176,21 +200,38 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
             addView(CadillacLineView(this@LegacyActivity), FrameLayout.LayoutParams(-1, dp(LINE_HEIGHT), Gravity.BOTTOM).apply { bottomMargin = dp(LINE_MARGIN) })
         }
         root.addView(splash, FrameLayout.LayoutParams(-1, -1))
-        animation.start()
+        animation.start(startup.speed)
         val started = android.os.SystemClock.elapsedRealtime()
-        val minimum = SplashFrames.TOTAL_MS + SPLASH_HOLD_MS
+        val hold = if (startup == StartupAnimation.FULL) SPLASH_HOLD_MS else SPLASH_SHORT_HOLD_MS
+        var finishedAt = 0L
         fun finishWhenReady() {
             if (destroyed) return
-            val elapsed = android.os.SystemClock.elapsedRealtime() - started
-            if (elapsed >= minimum && (ready.get() || elapsed >= SPLASH_MAX_MS)) {
-                splash.animate().alpha(0f).setDuration(400).withEndAction { root.removeView(splash) }.start()
-            } else main.postDelayed({ finishWhenReady() }, 100)
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (finishedAt == 0L && animation.finished) finishedAt = now
+            val held = finishedAt != 0L && now - finishedAt >= hold
+            if ((held && ready.get()) || now - started >= SPLASH_MAX_MS) {
+                splash.animate().alpha(0f).setDuration(if (startup == StartupAnimation.FULL) 400L else 250L).withEndAction { root.removeView(splash) }.start()
+            } else main.postDelayed({ finishWhenReady() }, 50)
         }
-        main.postDelayed({ finishWhenReady() }, minimum)
+        main.postDelayed({ finishWhenReady() }, 100)
     }
     private fun rowCopy(title: String, detail: String): CharSequence = android.text.SpannableString("$title\n$detail").apply {
         setSpan(android.text.style.RelativeSizeSpan(0.78f), title.length + 1, length, 0)
         setSpan(android.text.style.ForegroundColorSpan(MUTED), title.length + 1, length, 0)
+    }
+
+    private fun startupDetail(prefs: android.content.SharedPreferences): String =
+        "${StartupModes.get(prefs).label} · applies the next time the app opens"
+
+    private fun chooseStartupAnimation(changed: () -> Unit) {
+        val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
+        val modes = StartupAnimation.values()
+        val items = modes.map { "${it.label}\n${it.note}" }.toTypedArray<CharSequence>()
+        AlertDialog.Builder(this).setTitle("Startup animation")
+            .setSingleChoiceItems(items, modes.indexOf(StartupModes.get(prefs))) { dialog, which ->
+                StartupModes.save(prefs, modes[which]); changed(); dialog.dismiss()
+                Toast.makeText(this, "Saved. It applies the next time the app opens.", Toast.LENGTH_LONG).show()
+            }.setNegativeButton("Cancel", null).show()
     }
 
     private fun resolutionDetail(prefs: android.content.SharedPreferences): String {
@@ -292,6 +333,10 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         row("Other wireless modes", "Use an existing Wi-Fi network or configure the hotspot") { prepareWireless(false) }
         row("Start wired", "Connect an iPhone using a USB OTG adapter") { stopConnection(); wireless = false; prepareConnection() }
         row("Stop", "Disconnect CarPlay and turn off the app's hotspot") { stopConnection(); showStatus("Stopped. Ready when you are.") }
+        section("Startup")
+        val startupPrefs = getSharedPreferences("legacy", MODE_PRIVATE)
+        val startupRow = row("Startup animation", startupDetail(startupPrefs)) { }
+        startupRow.setOnClickListener { chooseStartupAnimation { startupRow.text = rowCopy("Startup animation", startupDetail(startupPrefs)) } }
         section("Video")
         val videoPrefs = getSharedPreferences("legacy", MODE_PRIVATE)
         val resolutionRow = row("Resolution", resolutionDetail(videoPrefs)) { }
@@ -518,6 +563,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         connectButton.alpha = if (connecting) 0.92f else 1f
         connectButton.text = connectLabel(connecting)
         connectButton.contentDescription = if (carPlayActive && !connecting) "Return to iPhone" else "Connect to iPhone"
+        disconnectButton.visibility = if (carPlayActive || connecting) View.VISIBLE else View.GONE
         if (connecting) connectButton.postOnAnimation(spinTick)
     }
 
@@ -858,6 +904,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val TEXT_LINE_GAP = 4
         private const val SETTINGS_ROW_HEIGHT = 88
         private const val SPLASH_HOLD_MS = 500L
+        private const val SPLASH_SHORT_HOLD_MS = 150L
         private const val LINE_HEIGHT = 24
         private const val LINE_MARGIN = 36
         private const val SPLASH_MAX_MS = 8000L

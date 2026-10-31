@@ -52,3 +52,8 @@ development PC. Rebuild it with `python tablet-setup/make_bootanimation.py`.
   dashboard does not need it.
 - If the tablet no longer boots after a change, boot to the stock recovery from the boot menu and
   use *wipe cache partition* first; a factory reset is the last resort and erases the tablet.
+
+## Startup time
+
+- **App:** Settings > Startup animation: Full (about 5 s), Short (about 2 s) or Off (straight to the Connect button). The splash sheet is decoded on a background thread, so the window opens in under a second either way.
+- **Android:** the biggest gains are fewer apps starting at boot (the script's hide lists) and system animations set to 0, which the script now also does. Set the dashboard as the Home app so it opens as soon as the system is ready, without waiting for the boot-completed broadcast.
