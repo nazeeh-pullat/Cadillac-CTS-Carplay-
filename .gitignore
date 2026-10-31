@@ -42,3 +42,6 @@ release-signing.properties
 
 # Written by scripts/download_count.py when the site is deployed
 site/assets/downloads.json
+
+# Device-specific backup written by tablet-setup/kiosk-setup.ps1 (needed locally for the undo script)
+tablet-setup/kiosk-state.json

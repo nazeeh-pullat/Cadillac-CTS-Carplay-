@@ -14,7 +14,7 @@ foreach ($package in @($state.hidden)) {
     $result = (& $Adb shell pm unhide --user 0 $package) -join ' '
     Write-Host "unhidden $package ($result)"
 }
-foreach ($entry in $state.settings.PSObject.Properties) {
+foreach ($entry in ($state.settings.PSObject.Properties | Where-Object { $_.Name -match '^(global|secure|system)/' })) {
     $namespace, $key = $entry.Name -split '/', 2
     if ($entry.Value -eq 'null' -or [string]::IsNullOrEmpty($entry.Value)) { & $Adb shell settings delete $namespace $key | Out-Null }
     else { & $Adb shell settings put $namespace $key $entry.Value | Out-Null }

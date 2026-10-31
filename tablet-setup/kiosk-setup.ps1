@@ -61,9 +61,9 @@ $settings = @(
   @{ Namespace = 'secure'; Key = 'lock_screen_show_notifications' },
   @{ Namespace = 'secure'; Key = 'lock_screen_allow_private_notifications' }
 )
-$state = if (Test-Path $statePath) { Get-Content $statePath -Raw | ConvertFrom-Json } else { [pscustomobject]@{ settings = @{}; hidden = @() } }
+$state = if (Test-Path $statePath) { Get-Content $statePath -Raw | ConvertFrom-Json } else { [pscustomobject]@{ settings = [pscustomobject]@{}; hidden = @() } }
 $savedSettings = @{}
-if ($state.settings) { $state.settings.PSObject.Properties | ForEach-Object { $savedSettings[$_.Name] = $_.Value } }
+if ($state.settings) { $state.settings.PSObject.Properties | Where-Object { $_.Name -match '^(global|secure|system)/' } | ForEach-Object { $savedSettings[$_.Name] = $_.Value } }
 foreach ($item in $settings) {
     $name = "$($item.Namespace)/$($item.Key)"
     if (-not $savedSettings.ContainsKey($name)) { $savedSettings[$name] = ((Invoke-Adb @('shell','settings','get',$item.Namespace,$item.Key)) -join '').Trim() }
