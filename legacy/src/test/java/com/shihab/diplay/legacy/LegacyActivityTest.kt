@@ -79,7 +79,7 @@ class LegacyActivityTest {
             controls.single { it.text == "Return to CarPlay" }.performClick()
             assertTrue(controls.none { it.isShown })
             activity.setCarPlayActive(false)
-            assertTrue(controls.single { it.text == "Connect to iPhone" }.isShown)
+            assertTrue(controls.single { it.contentDescription == "Connect to iPhone" }.isShown)
             assertFalse(controls.single { it.text == "Return to CarPlay" }.isShown)
         } finally { host.pause().stop().destroy() }
     }
@@ -101,7 +101,7 @@ class LegacyActivityTest {
         val host = Robolectric.buildActivity(LegacyActivity::class.java).setup()
         try {
             val controls = buttons(host.get().window.decorView)
-            assertTrue(controls.single { it.text == "Connect to iPhone" }.isShown)
+            assertTrue(controls.single { it.contentDescription == "Connect to iPhone" }.isShown)
             assertFalse(controls.single { it.text.toString().startsWith("Start wired\n") }.isShown)
             host.get().openSettings()
             assertTrue(controls.single { it.text.toString().startsWith("Start wired\n") }.isShown)
@@ -119,7 +119,7 @@ class LegacyActivityTest {
         val host = Robolectric.buildActivity(LegacyActivity::class.java).setup()
         try {
             val root = host.get().window.decorView
-            assertEquals(listOf("Connect to iPhone"), buttons(root).filter { it.isShown }.map { it.text.toString() })
+            assertEquals(listOf("Connect to iPhone"), buttons(root).filter { it.isShown }.map { (it.contentDescription ?: it.text).toString() })
             val gear = icons(root).single { it.contentDescription == "Settings" }
             assertTrue(gear.isShown)
             gear.performClick()
@@ -150,7 +150,7 @@ class LegacyActivityTest {
         shadowOf(BluetoothAdapter.getDefaultAdapter()).setEnabled(false)
         val host = Robolectric.buildActivity(LegacyActivity::class.java).setup()
         try {
-            buttons(host.get().window.decorView).single { it.text == "Connect to iPhone" }.performClick()
+            buttons(host.get().window.decorView).single { it.contentDescription == "Connect to iPhone" }.performClick()
             assertEquals(BluetoothAdapter.ACTION_REQUEST_ENABLE,
                 shadowOf(host.get()).nextStartedActivityForResult.intent.action)
         } finally { host.pause().stop().destroy() }

@@ -14,7 +14,7 @@ internal object VideoModes {
         VideoResolution(1024, 600, "Native", "Matches the tablet's own screen, sharper text"),
         VideoResolution(1280, 720, "Sharp", "Experimental; may stutter on this chip"),
     )
-    val frameRates = listOf(20, 24, 30)
+    val frameRates = listOf(20, 24, 30, 60)
 
     val DEFAULT_RESOLUTION get() = resolutions[1]
     const val DEFAULT_FPS = 30
@@ -32,6 +32,8 @@ internal object VideoModes {
     fun saveResolution(prefs: SharedPreferences, value: VideoResolution) {
         prefs.edit().putString(KEY_RESOLUTION, "${value.width}x${value.height}").apply()
     }
+
+    fun frameRateLabel(fps: Int) = if (fps >= 60) "$fps fps (experimental)" else "$fps fps"
 
     fun saveFps(prefs: SharedPreferences, value: Int) {
         if (value in frameRates) prefs.edit().putInt(KEY_FPS, value).apply()

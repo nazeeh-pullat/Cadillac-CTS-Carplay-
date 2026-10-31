@@ -107,7 +107,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
 
     private fun createDashboard(): View {
         val pages = FrameLayout(this)
-        home = FrameLayout(this).apply { background = CadillacBackground(resources.displayMetrics.density) }
+        home = FrameLayout(this).apply { background = CadillacBackground() }
         val gear = iconButton(R.drawable.ic_settings, "Settings") { openSettings() }
         (home as FrameLayout).addView(gear, FrameLayout.LayoutParams(dp(ICON_TARGET), dp(ICON_TARGET), Gravity.TOP or Gravity.END).apply {
             topMargin = dp(PAGE_PADDING); marginEnd = dp(PAGE_PADDING)
@@ -124,6 +124,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         }.apply {
             textSize = 22f; minimumHeight = dp(CONNECT_HEIGHT)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            contentDescription = "Connect to iPhone"; text = connectLabel(false)
             val champagne = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xfff3efe4.toInt(), 0xffd9cdb0.toInt())).apply {
                 cornerRadius = dp(CARD_RADIUS).toFloat(); setStroke(dp(1), 0xffe9dcb8.toInt())
             }
@@ -132,6 +133,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         val buttonWidth = minOf(CONNECT_WIDTH, resources.configuration.screenWidthDp - PAGE_PADDING * 2)
         hero.addView(connectButton, LinearLayout.LayoutParams(dp(buttonWidth), -2).apply { topMargin = dp(HERO_ACTION_GAP) })
         (home as FrameLayout).addView(hero, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        (home as FrameLayout).addView(CadillacLineView(this), FrameLayout.LayoutParams(-1, dp(LINE_HEIGHT), Gravity.BOTTOM).apply { bottomMargin = dp(LINE_MARGIN) })
         settingsPage = createSettingsContent().apply { visibility = View.GONE }
         pages.addView(home, FrameLayout.LayoutParams(-1, -1))
         pages.addView(settingsPage, FrameLayout.LayoutParams(-1, -1))
@@ -167,35 +169,24 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
             catch (error: Throwable) { diagnostic("Startup preparation: ${error.javaClass.simpleName}") }
             finally { ready.set(true) }
         }, "DiPlay-startup").start()
+        val animation = SplashAnimationView(this)
         val splash = FrameLayout(this).apply {
-            background = CadillacBackground(resources.displayMetrics.density)
-            isClickable = true; contentDescription = "Cadillac startup"
+            setBackgroundColor(Color.BLACK); isClickable = true
+            addView(animation, FrameLayout.LayoutParams(-1, -1))
+            addView(CadillacLineView(this@LegacyActivity), FrameLayout.LayoutParams(-1, dp(LINE_HEIGHT), Gravity.BOTTOM).apply { bottomMargin = dp(LINE_MARGIN) })
         }
-        val logo = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
-        val crest = ImageView(this).apply {
-            setImageResource(R.drawable.cadillac_crest)
-            alpha = 0f; scaleX = 0.92f; scaleY = 0.92f; translationY = dp(BLOCK_GAP).toFloat()
-        }
-        val script = ImageView(this).apply { setImageResource(R.drawable.cadillac_wordmark); alpha = 0f }
-        val light = View(this).apply { setBackgroundColor(ACCENT); alpha = 0f; scaleX = 0.05f }
-        logo.addView(crest, LinearLayout.LayoutParams(dp(SPLASH_CREST_WIDTH), dp(SPLASH_CREST_HEIGHT)))
-        logo.addView(script, LinearLayout.LayoutParams(dp(SPLASH_WORDMARK_WIDTH), dp(SPLASH_WORDMARK_HEIGHT)).apply { topMargin = dp(CARD_PADDING) })
-        logo.addView(light, LinearLayout.LayoutParams(dp(SPLASH_WORDMARK_WIDTH), dp(TRIM_HEIGHT)).apply { topMargin = dp(HERO_ACTION_GAP) })
-        splash.addView(logo, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         root.addView(splash, FrameLayout.LayoutParams(-1, -1))
-        val easing = android.view.animation.DecelerateInterpolator()
-        crest.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f).setDuration(1000).setInterpolator(easing).start()
-        script.animate().alpha(1f).setStartDelay(350).setDuration(1000).setInterpolator(easing).start()
-        light.animate().alpha(1f).scaleX(1f).setStartDelay(700).setDuration(1600).setInterpolator(easing).start()
+        animation.start()
         val started = android.os.SystemClock.elapsedRealtime()
+        val minimum = SplashFrames.TOTAL_MS + SPLASH_HOLD_MS
         fun finishWhenReady() {
             if (destroyed) return
             val elapsed = android.os.SystemClock.elapsedRealtime() - started
-            if (elapsed >= SPLASH_MIN_MS && (ready.get() || elapsed >= SPLASH_MAX_MS)) {
+            if (elapsed >= minimum && (ready.get() || elapsed >= SPLASH_MAX_MS)) {
                 splash.animate().alpha(0f).setDuration(400).withEndAction { root.removeView(splash) }.start()
             } else main.postDelayed({ finishWhenReady() }, 100)
         }
-        main.postDelayed({ finishWhenReady() }, SPLASH_MIN_MS)
+        main.postDelayed({ finishWhenReady() }, minimum)
     }
     private fun rowCopy(title: String, detail: String): CharSequence = android.text.SpannableString("$title\n$detail").apply {
         setSpan(android.text.style.RelativeSizeSpan(0.78f), title.length + 1, length, 0)
@@ -208,7 +199,24 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private fun frameRateDetail(prefs: android.content.SharedPreferences) =
-        "${VideoModes.fps(prefs)} fps · applies the next time you connect"
+        "${VideoModes.frameRateLabel(VideoModes.fps(prefs))} · applies the next time you connect"
+
+    /** The video size is fixed when CarPlay connects, so a change needs a fresh start of the app. */
+    private fun offerRestart(summary: String) {
+        AlertDialog.Builder(this).setTitle("Restart to apply?")
+            .setMessage("$summary Restart the app now so the next connection uses it. CarPlay will disconnect.")
+            .setPositiveButton("Restart app") { _, _ -> restartApp() }
+            .setNegativeButton("Later", null).show()
+    }
+
+    private fun restartApp() {
+        stopConnection()
+        val launch = packageManager.getLaunchIntentForPackage(packageName)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK) ?: return
+        val pending = android.app.PendingIntent.getActivity(this, 0, launch, android.app.PendingIntent.FLAG_CANCEL_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
+        (getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager).set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 500, pending)
+        finishAndRemoveTask()
+        android.os.Process.killProcess(android.os.Process.myPid())
+    }
 
     private fun chooseResolution(changed: () -> Unit) {
         val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
@@ -218,18 +226,18 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
             .setSingleChoiceItems(items, VideoModes.resolutions.indexOf(current)) { dialog, which ->
                 VideoModes.saveResolution(prefs, VideoModes.resolutions[which])
                 changed(); dialog.dismiss()
-                Toast.makeText(this, "Saved. Tap Reconnect iPhone to apply.", Toast.LENGTH_LONG).show()
+                offerRestart("Resolution set to ${VideoModes.resolutions[which].label}.")
             }.setNegativeButton("Cancel", null).show()
     }
 
     private fun chooseFrameRate(changed: () -> Unit) {
         val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
-        val items = VideoModes.frameRates.map { "$it fps" }.toTypedArray<CharSequence>()
+        val items = VideoModes.frameRates.map { VideoModes.frameRateLabel(it) }.toTypedArray<CharSequence>()
         AlertDialog.Builder(this).setTitle("Frame rate")
             .setSingleChoiceItems(items, VideoModes.frameRates.indexOf(VideoModes.fps(prefs))) { dialog, which ->
                 VideoModes.saveFps(prefs, VideoModes.frameRates[which])
                 changed(); dialog.dismiss()
-                Toast.makeText(this, "Saved. Tap Reconnect iPhone to apply.", Toast.LENGTH_LONG).show()
+                offerRestart("Frame rate set to ${VideoModes.frameRateLabel(VideoModes.frameRates[which])}.")
             }.setNegativeButton("Cancel", null).show()
     }
 
@@ -494,9 +502,22 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         }, "DiPlay-hotspot").start()
     }
 
+    private var connectingNow = false
+    private val connectSpinner by lazy { SpinnerDrawable(BACKGROUND, dp(3).toFloat()) }
+    private val spinTick = object : Runnable {
+        override fun run() { connectButton.invalidate(); if (connectingNow && !destroyed) connectButton.postOnAnimation(this) }
+    }
+
+    private fun connectLabel(connecting: Boolean) = ConnectLabel.build(
+        if (connecting) "Connecting" else "Connect",
+        if (connecting) connectSpinner else resources.getDrawable(R.drawable.ic_apple, theme), dp(28), dp(10))
+
     private fun setConnecting(connecting: Boolean) {
+        connectingNow = connecting
         connectButton.isEnabled = !connecting
-        connectButton.alpha = if (connecting) 0.55f else 1f
+        connectButton.alpha = if (connecting) 0.92f else 1f
+        connectButton.text = connectLabel(connecting)
+        if (connecting) connectButton.postOnAnimation(spinTick)
     }
 
     private fun connectionFailure(message: String) {
@@ -833,10 +854,10 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val ROW_GAP = 8
         private const val TEXT_LINE_GAP = 4
         private const val SETTINGS_ROW_HEIGHT = 88
-        private const val SPLASH_MIN_MS = 2800L
-        private const val SPLASH_MAX_MS = 6000L
-        private const val SPLASH_CREST_WIDTH = 160
-        private const val SPLASH_CREST_HEIGHT = 60
+        private const val SPLASH_HOLD_MS = 500L
+        private const val LINE_HEIGHT = 24
+        private const val LINE_MARGIN = 36
+        private const val SPLASH_MAX_MS = 8000L
         private const val SPLASH_WORDMARK_WIDTH = 224
         private const val SPLASH_WORDMARK_HEIGHT = 60
         private const val CREST_WIDTH = 72
@@ -845,7 +866,6 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val WORDMARK_HEIGHT = 36
         private const val BRAND_HEIGHT = 56
         private const val TRIM_SEGMENT = 24
-        private const val TRIM_HEIGHT = 2
         private val BACKGROUND = 0xff080a0c.toInt()
         private val CARD = 0xff15181c.toInt()
         private val ACCENT = 0xffc4b28b.toInt()

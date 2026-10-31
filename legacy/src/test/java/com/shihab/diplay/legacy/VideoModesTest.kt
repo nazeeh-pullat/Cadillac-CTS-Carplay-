@@ -36,6 +36,13 @@ class VideoModesTest {
         assertEquals(VideoModes.DEFAULT_FPS, VideoModes.fps(prefs))
     }
 
+    @Test fun sixtyFpsIsOfferedAsExperimental() {
+        VideoModes.saveFps(prefs, 60)
+        assertEquals(60, VideoModes.fps(prefs))
+        assertEquals("60 fps (experimental)", VideoModes.frameRateLabel(60))
+        assertEquals("30 fps", VideoModes.frameRateLabel(30))
+    }
+
     @Test fun everyPresetKeepsTheTabletsLandscapeShape() {
         VideoModes.resolutions.forEach { assertEquals(1.7, it.width.toDouble() / it.height, 0.1) }
     }

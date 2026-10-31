@@ -21,3 +21,6 @@ https://news.cadillac.com/newsroom.detail.print.html/content/Pages/news/us/en/20
 
 The theme is for the existing DiPlay connection dashboard; the iPhone renders the
 CarPlay interface after connection.
+
+Splash animation: splash-source.gif was supplied by the app owner. build_splash_sheet.py crops it into res/drawable-nodpi/splash_sheet.png, clamps near-black to pure black and generates SplashFrames.kt.
+
