@@ -118,7 +118,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         }, LinearLayout.LayoutParams(dp(HERO_CREST_WIDTH), dp(HERO_CREST_HEIGHT)))
         hero.addView(ImageView(this).apply {
             setImageResource(R.drawable.cadillac_wordmark); contentDescription = "Cadillac"
-        }, LinearLayout.LayoutParams(dp(SPLASH_WORDMARK_WIDTH), dp(SPLASH_WORDMARK_HEIGHT)).apply { topMargin = dp(BLOCK_GAP) })
+        }, LinearLayout.LayoutParams(dp(HERO_WORDMARK_WIDTH), dp(HERO_WORDMARK_HEIGHT)).apply { topMargin = dp(BLOCK_GAP) })
         connectButton = dashboardButton("Connect to iPhone", true) {
             if (carPlayActive) showDashboard(false) else prepareWireless(true)
         }.apply {
@@ -509,7 +509,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private fun connectLabel(connecting: Boolean) = ConnectLabel.build(
-        if (connecting) "Connecting" else "Connect",
+        if (connecting) "Connecting" else if (carPlayActive) "Return to" else "Connect",
         if (connecting) connectSpinner else resources.getDrawable(R.drawable.ic_apple, theme), dp(28), dp(10))
 
     private fun setConnecting(connecting: Boolean) {
@@ -517,6 +517,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         connectButton.isEnabled = !connecting
         connectButton.alpha = if (connecting) 0.92f else 1f
         connectButton.text = connectLabel(connecting)
+        connectButton.contentDescription = if (carPlayActive && !connecting) "Return to iPhone" else "Connect to iPhone"
         if (connecting) connectButton.postOnAnimation(spinTick)
     }
 
@@ -847,8 +848,10 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val CONNECT_WIDTH = 440
         private const val CONNECT_HEIGHT = 96
         private const val ICON_TARGET = 56
-        private const val HERO_CREST_WIDTH = 132
-        private const val HERO_CREST_HEIGHT = 50
+        private const val HERO_CREST_WIDTH = 180
+        private const val HERO_CREST_HEIGHT = 68
+        private const val HERO_WORDMARK_WIDTH = 300
+        private const val HERO_WORDMARK_HEIGHT = 80
         private const val HERO_ACTION_GAP = 32
         private const val SECTION_GAP = 24
         private const val ROW_GAP = 8

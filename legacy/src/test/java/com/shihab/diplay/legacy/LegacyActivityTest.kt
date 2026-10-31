@@ -65,6 +65,7 @@ class LegacyActivityTest {
             val controls = buttons(activity.window.decorView)
             activity.setCarPlayActive(true)
             assertTrue(controls.none { it.isShown })
+            assertEquals("Return to iPhone", controls.first { it.contentDescription?.toString()?.endsWith("to iPhone") == true }.contentDescription.toString())
             val root = activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as ViewGroup
             val video = root.getChildAt(0) as SurfaceView
             assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, video.layoutParams.width)

@@ -10,8 +10,8 @@ from pathlib import Path
 from PIL import Image, ImageFilter
 
 BLACK_POINT = 18      # channel values at or below this become 0
-COLUMNS = 8
-SCALE = 2             # pre-scale with Lanczos so the splash is sharper than a runtime bilinear stretch
+COLUMNS = 7
+SCALE = 3             # pre-scale with Lanczos so the splash is sharper than a runtime bilinear stretch
 PAD = 4
 
 root = Path(__file__).resolve().parents[1]
@@ -19,6 +19,10 @@ source = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'design-assets' / 's
 gif = Image.open(source)
 levels = [0 if v <= BLACK_POINT else round((v - BLACK_POINT) * 255 / (255 - BLACK_POINT)) for v in range(256)]
 
+# The artwork is flat white-on-black line art, so after upscaling a gentle S-curve snaps blurry edges
+# to crisp, still anti-aliased ones (a light-weight stand-in for vectorising every frame).
+import math
+edge = [0 if v <= BLACK_POINT else min(255, max(0, round(255 / (1 + math.exp(-(v - 128) / 26.0)) * 1.04 - 3))) for v in range(256)]
 frames, durations = [], []
 for index in range(gif.n_frames):
     gif.seek(index)
@@ -41,7 +45,7 @@ cell_w, cell_h = crop_w * SCALE, crop_h * SCALE
 sheet = Image.new('RGB', (cell_w * COLUMNS, cell_h * rows), (0, 0, 0))
 for index, frame in enumerate(frames):
     big = frame.crop((left, top, right, bottom)).resize((cell_w, cell_h), Image.LANCZOS)
-    big = big.filter(ImageFilter.UnsharpMask(radius=1.4, percent=80, threshold=2)).point(levels * 3)
+    big = big.filter(ImageFilter.UnsharpMask(radius=2.0, percent=110, threshold=1)).point(edge * 3)
     sheet.paste(big, ((index % COLUMNS) * cell_w, (index // COLUMNS) * cell_h))
 
 drawable = root / 'src' / 'main' / 'res' / 'drawable-nodpi'
