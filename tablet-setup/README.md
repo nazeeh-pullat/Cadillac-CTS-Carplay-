@@ -29,7 +29,7 @@ touches system and lock-screen settings; read it, then run it yourself:
 | --- | --- | --- |
 | Status and bottom bar hidden by default, still usable | `policy_control = immersive.full=*`; swipe from the edge reveals them | They are hidden, not removed |
 | No notifications | Hides the apps that post them, turns off heads-up and lock-screen notifications | The pull-down shade still exists when you swipe |
-| No lock screen | `lockscreen.disabled = 1` and no lock-screen notifications | A PIN/pattern must be removed in Settings first |
+| No lock screen | `lockscreen.disabled = 1` and no lock-screen notifications | **This firmware ignores the setting**: after sleep the clock and status bar still appear. Set Settings > Security > Screen lock > None yourself (and raise the screen timeout) |
 | No home screen needed | You choose the dashboard as Home (see above) | Launcher3 stays installed as a fallback |
 | Debloat | `pm hide` for about 60 apps and services you do not need | Nothing is deleted; hidden apps can be restored |
 

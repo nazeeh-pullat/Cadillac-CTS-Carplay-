@@ -119,6 +119,19 @@ class LegacyActivityTest {
         else -> emptyList()
     }
 
+    @Test fun ledSwatchesStayHiddenUntilAStripIsSaved() {
+        val host = Robolectric.buildActivity(LegacyActivity::class.java).setup()
+        try {
+            val root = host.get().window.decorView
+            fun swatches(view: View): List<View> = when (view) {
+                is ViewGroup -> (0 until view.childCount).flatMap { swatches(view.getChildAt(it)) }
+                else -> if (view.contentDescription?.startsWith("LED ") == true) listOf(view) else emptyList()
+            }
+            assertTrue(swatches(root).isNotEmpty())
+            assertTrue(swatches(root).none { it.isShown })
+        } finally { host.pause().stop().destroy() }
+    }
+
     @Test fun homeHasOnePrimaryActionAndAccessibleSettingsGear() {
         val host = Robolectric.buildActivity(LegacyActivity::class.java).setup()
         try {

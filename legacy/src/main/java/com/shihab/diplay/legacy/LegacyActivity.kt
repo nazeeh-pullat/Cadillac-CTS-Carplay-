@@ -60,6 +60,8 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var settingsPage: View
     private lateinit var connectButton: Button
     private lateinit var disconnectButton: ImageButton
+    private lateinit var led: LedStrip
+    private lateinit var ledSwatches: LinearLayout
     private var settingsOpen = false
     private var directHotspot = true
     private var carPlayActive = false
@@ -78,6 +80,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        led = LedStrip(this, getSharedPreferences("legacy", MODE_PRIVATE))
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         video = SurfaceView(this).apply {
@@ -153,6 +156,10 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         hero.addView(actions, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(HERO_ACTION_GAP) })
         (home as FrameLayout).addView(hero, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         (home as FrameLayout).addView(CadillacLineView(this), FrameLayout.LayoutParams(-1, dp(LINE_HEIGHT), Gravity.BOTTOM).apply { bottomMargin = dp(LINE_MARGIN) })
+        ledSwatches = buildLedSwatches()
+        (home as FrameLayout).addView(ledSwatches, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(LED_SWATCH_MARGIN) })
+        refreshLedSwatches()
+        if (LedModes.address(getSharedPreferences("legacy", MODE_PRIVATE)) != null) led.connect()
         settingsPage = createSettingsContent().apply { visibility = View.GONE }
         pages.addView(home, FrameLayout.LayoutParams(-1, -1))
         pages.addView(settingsPage, FrameLayout.LayoutParams(-1, -1))
@@ -222,6 +229,70 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
 
     private fun startupDetail(prefs: android.content.SharedPreferences): String =
         "${StartupModes.get(prefs).label} · applies the next time the app opens"
+
+    private fun ledDetail(prefs: android.content.SharedPreferences): String {
+        val name = LedModes.name(prefs) ?: return "Tap to scan for nearby Bluetooth LED controllers"
+        return "$name · ${led.summary}"
+    }
+
+    private fun swatchBackground(color: LedColor, selected: Boolean) = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(if (color.name == "off") 0xff101214.toInt() else color.argb)
+        setStroke(dp(if (selected) 3 else 1), if (selected) Color.WHITE else 0x55ffffff)
+    }
+
+    /** Colours only, no text: a quiet row of dots along the bottom of Home, shown once a strip is saved. */
+    private fun buildLedSwatches(): LinearLayout {
+        val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
+        val size = minOf(40, ((resources.configuration.screenWidthDp - PAGE_PADDING * 2) / (LedModes.palette.size * 1.35f)).toInt())
+        val gap = dp(maxOf(6, size / 4))
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
+            LedModes.palette.forEachIndexed { index, color ->
+                addView(View(this@LegacyActivity).apply {
+                    contentDescription = "LED ${color.name}"; isClickable = true
+                    background = swatchBackground(color, index == LedModes.colorIndex(prefs))
+                    setOnClickListener { pickLed(index) }
+                }, LinearLayout.LayoutParams(dp(size), dp(size)).apply { marginStart = gap / 2; marginEnd = gap / 2 })
+            }
+        }
+    }
+
+    private fun refreshLedSwatches() {
+        val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
+        ledSwatches.visibility = if (LedModes.address(prefs) != null) View.VISIBLE else View.GONE
+        val selected = LedModes.colorIndex(prefs)
+        LedModes.palette.forEachIndexed { index, color -> ledSwatches.getChildAt(index).background = swatchBackground(color, index == selected) }
+    }
+
+    private fun pickLed(index: Int) {
+        val color = LedModes.palette[index]
+        LedModes.saveColor(getSharedPreferences("legacy", MODE_PRIVATE), index)
+        led.setColor(color.red, color.green, color.blue)
+        refreshLedSwatches()
+    }
+
+    private fun testLed() {
+        val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
+        if (LedModes.address(prefs) == null) { Toast.makeText(this, "Find your LED strip first.", Toast.LENGTH_LONG).show(); return }
+        val steps = listOf(LedModes.palette[0], LedModes.palette[3], LedModes.palette[5])
+        steps.forEachIndexed { i, c -> main.postDelayed({ if (!destroyed) led.setColor(c.red, c.green, c.blue) }, i * 900L) }
+        main.postDelayed({
+            if (destroyed) return@postDelayed
+            val restore = LedModes.colorIndex(prefs).takeIf { it >= 0 }?.let { LedModes.palette[it] } ?: LedModes.palette.last()
+            led.setColor(restore.red, restore.green, restore.blue)
+        }, steps.size * 900L)
+        Toast.makeText(this, "Watch the strip: red, green, blue.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun chooseLedProtocol(changed: () -> Unit) {
+        val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
+        val modes = LedProtocol.values()
+        AlertDialog.Builder(this).setTitle("Controller type")
+            .setSingleChoiceItems(modes.map { it.label }.toTypedArray<CharSequence>(), modes.indexOf(LedModes.protocol(prefs))) { dialog, which ->
+                LedModes.saveProtocol(prefs, modes[which]); led.close(); led.connect(); changed(); dialog.dismiss()
+            }.setNegativeButton("Cancel", null).show()
+    }
 
     private fun chooseStartupAnimation(changed: () -> Unit) {
         val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
@@ -333,6 +404,19 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         row("Other wireless modes", "Use an existing Wi-Fi network or configure the hotspot") { prepareWireless(false) }
         row("Start wired", "Connect an iPhone using a USB OTG adapter") { stopConnection(); wireless = false; prepareConnection() }
         row("Stop", "Disconnect CarPlay and turn off the app's hotspot") { stopConnection(); showStatus("Stopped. Ready when you are.") }
+        section("LED strip")
+        val ledPrefs = getSharedPreferences("legacy", MODE_PRIVATE)
+        val ledRow = row("LED strip", ledDetail(ledPrefs)) { }
+        ledRow.setOnClickListener {
+            LedScannerDialog(this, ledPrefs) { led.close(); led.connect(); refreshLedSwatches(); ledRow.text = rowCopy("LED strip", ledDetail(ledPrefs)) }.show()
+        }
+        led.onChange = { ledRow.text = rowCopy("LED strip", ledDetail(ledPrefs)) }
+        row("Test colours", "Cycle red, green and blue on the saved strip") { testLed() }
+        val protocolRow = row("Controller type", "${LedModes.protocol(ledPrefs).label} · change if the colours do not match") { }
+        protocolRow.setOnClickListener { chooseLedProtocol { protocolRow.text = rowCopy("Controller type", "${LedModes.protocol(ledPrefs).label} · change if the colours do not match") } }
+        row("Forget LED strip", "Remove the saved strip and hide the colour swatches from Home") {
+            LedModes.forget(ledPrefs); led.close(); refreshLedSwatches(); ledRow.text = rowCopy("LED strip", ledDetail(ledPrefs))
+        }
         section("Startup")
         val startupPrefs = getSharedPreferences("legacy", MODE_PRIVATE)
         val startupRow = row("Startup animation", startupDetail(startupPrefs)) { }
@@ -880,6 +964,8 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         testTone?.release()
         testTone = null
         stopConnection()
+        led.onChange = null
+        led.close()
         super.onDestroy()
     }
 
@@ -906,6 +992,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val SPLASH_HOLD_MS = 500L
         private const val SPLASH_SHORT_HOLD_MS = 150L
         private const val LINE_HEIGHT = 24
+        private const val LED_SWATCH_MARGIN = 78
         private const val LINE_MARGIN = 36
         private const val SPLASH_MAX_MS = 8000L
         private const val SPLASH_WORDMARK_WIDTH = 224

@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <application android:label="Cadillac CTS Dashboard" android:icon="@drawable/ic_launcher_cadillac" android:theme="@style/TabletTheme"
         android:allowBackup="false" android:supportsRtl="true" android:usesCleartextTraffic="true">
         <!-- Removal directives are not runtime registrations; these services are absent from the merged APK. -->

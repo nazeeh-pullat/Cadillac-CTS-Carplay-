@@ -42,7 +42,14 @@ bars hidden (`policy_control=immersive.full=*`), lock screen off, system animati
 `tablet-setup/kiosk-undo.ps1` (uses `kiosk-state.json`). Launcher3 is intentionally left as a fallback.
 **No full firmware backup exists** (MediaTek read-back failed), so avoid risky system changes.
 
+## LED ambient lights
+
+The dashboard can drive a Bluetooth LE LED controller (the kind controlled by the iPhone Lotus Lantern app). Settings > LED strip scans for devices, saves one, tests colours and picks the controller family (ELK-BLEDOM 7E...EF or Triones/LEDBLE 56...AA; auto-detected from the writable GATT characteristic). Once a strip is saved, Home shows a text-free row of colour dots above the bottom line; with no strip saved Home stays clean. Code: `LedStrip.kt`, `LedScannerDialog.kt`. **Hardware control is untested**: the scan works, but no strip was in range during development, and controllers allow one connection at a time, so close the iPhone app first.
+
 ## Known issues and open items
+
+- The firmware ignores `lockscreen.disabled`; the lock screen appears after sleep until Screen lock is set to None in Settings.
+
 
 - Music and call audio are unverified; the microphone is disabled.
 - If the app goes to the background during a session the video decoder logs "surface has been released" and retries
