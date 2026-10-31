@@ -88,7 +88,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         root.addView(dashboard, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
         enterImmersiveMode()
-        if (state == null) showSplash(root)
+        if (state == null) showSplash(root) else playHomeEntrance()
         if (Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT) {
                 if (!toggleCarPlayControls()) finish()
@@ -113,21 +113,33 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
             topMargin = dp(PAGE_PADDING); marginEnd = dp(PAGE_PADDING)
         })
         val hero = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
+        val fit = minOf(1f, (resources.configuration.screenWidthDp - PAGE_PADDING * 2) / HERO_WORDMARK_WIDTH.toFloat())
+        fun scaled(value: Int) = dp((value * fit).toInt())
         hero.addView(ImageView(this).apply {
             setImageResource(R.drawable.cadillac_crest); contentDescription = "Cadillac crest"
-        }, LinearLayout.LayoutParams(dp(HERO_CREST_WIDTH), dp(HERO_CREST_HEIGHT)))
+        }, LinearLayout.LayoutParams(scaled(HERO_CREST_WIDTH), scaled(HERO_CREST_HEIGHT)))
         hero.addView(ImageView(this).apply {
             setImageResource(R.drawable.cadillac_wordmark); contentDescription = "Cadillac"
-        }, LinearLayout.LayoutParams(dp(SPLASH_WORDMARK_WIDTH), dp(SPLASH_WORDMARK_HEIGHT)).apply { topMargin = dp(BLOCK_GAP) })
+        }, LinearLayout.LayoutParams(scaled(HERO_WORDMARK_WIDTH), scaled(HERO_WORDMARK_HEIGHT)).apply { topMargin = dp(BLOCK_GAP) })
+        hero.addView(TextView(this).apply {
+            text = "CTS DASHBOARD"; textSize = 15f; setTextColor(ACCENT); letterSpacing = 0.42f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(CARD_PADDING) })
         connectButton = dashboardButton("Connect to iPhone", true) {
             if (carPlayActive) showDashboard(false) else prepareWireless(true)
         }.apply {
             textSize = 22f; minimumHeight = dp(CONNECT_HEIGHT)
-            background = RippleDrawable(ColorStateList.valueOf(0x22c4b28b), panel(FOREGROUND, CARD_RADIUS), null)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            val champagne = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xfff3efe4.toInt(), 0xffd9cdb0.toInt())).apply {
+                cornerRadius = dp(CARD_RADIUS).toFloat(); setStroke(dp(1), 0xffe9dcb8.toInt())
+            }
+            background = RippleDrawable(ColorStateList.valueOf(0x33806b3c), champagne, null)
         }
         val buttonWidth = minOf(CONNECT_WIDTH, resources.configuration.screenWidthDp - PAGE_PADDING * 2)
         hero.addView(connectButton, LinearLayout.LayoutParams(dp(buttonWidth), -2).apply { topMargin = dp(HERO_ACTION_GAP) })
         (home as FrameLayout).addView(hero, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        heroParts = (0 until hero.childCount).map { hero.getChildAt(it) } + gear
+        heroParts.forEach { it.alpha = 0f; it.translationY = dp(CARD_PADDING).toFloat() }
         settingsPage = createSettingsContent().apply { visibility = View.GONE }
         pages.addView(home, FrameLayout.LayoutParams(-1, -1))
         pages.addView(settingsPage, FrameLayout.LayoutParams(-1, -1))
@@ -164,34 +176,71 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
             finally { ready.set(true) }
         }, "DiPlay-startup").start()
         val splash = FrameLayout(this).apply {
-            background = CadillacBackground(resources.displayMetrics.density)
-            isClickable = true; contentDescription = "Cadillac startup"
+            background = CadillacBackground(resources.displayMetrics.density, glow = false)
+            isClickable = true; contentDescription = "Cadillac CTS Dashboard startup"
         }
+        // Light pools behind the crest first, then the crest rises into it, the script is drawn
+        // left to right, the caption tracks open and a champagne line grows from the centre.
+        val glow = View(this).apply { background = SpotlightDrawable(0.45f, 0x4c); alpha = 0f }
+        splash.addView(glow, FrameLayout.LayoutParams(-1, -1))
+        val fit = minOf(1f, (resources.configuration.screenWidthDp - PAGE_PADDING * 2) / SPLASH_WORDMARK_WIDTH.toFloat())
+        fun scaled(value: Int) = dp((value * fit).toInt())
         val logo = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         val crest = ImageView(this).apply {
             setImageResource(R.drawable.cadillac_crest)
-            alpha = 0f; scaleX = 0.92f; scaleY = 0.92f; translationY = dp(BLOCK_GAP).toFloat()
+            alpha = 0f; scaleX = 0.82f; scaleY = 0.82f; translationY = dp(BLOCK_GAP * 2).toFloat()
         }
-        val script = ImageView(this).apply { setImageResource(R.drawable.cadillac_wordmark); alpha = 0f }
-        val light = View(this).apply { setBackgroundColor(ACCENT); alpha = 0f; scaleX = 0.05f }
-        logo.addView(crest, LinearLayout.LayoutParams(dp(SPLASH_CREST_WIDTH), dp(SPLASH_CREST_HEIGHT)))
-        logo.addView(script, LinearLayout.LayoutParams(dp(SPLASH_WORDMARK_WIDTH), dp(SPLASH_WORDMARK_HEIGHT)).apply { topMargin = dp(CARD_PADDING) })
-        logo.addView(light, LinearLayout.LayoutParams(dp(SPLASH_WORDMARK_WIDTH), dp(TRIM_HEIGHT)).apply { topMargin = dp(HERO_ACTION_GAP) })
+        val script = ImageView(this).apply { setImageResource(R.drawable.cadillac_wordmark) }
+        val caption = TextView(this).apply {
+            text = "CTS DASHBOARD"; textSize = 17f; setTextColor(ACCENT); letterSpacing = 0.9f; alpha = 0f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); gravity = Gravity.CENTER
+        }
+        val light = View(this).apply { setBackgroundColor(ACCENT); alpha = 0f; scaleX = 0f }
+        logo.addView(crest, LinearLayout.LayoutParams(scaled(SPLASH_CREST_WIDTH), scaled(SPLASH_CREST_HEIGHT)))
+        logo.addView(script, LinearLayout.LayoutParams(scaled(SPLASH_WORDMARK_WIDTH), scaled(SPLASH_WORDMARK_HEIGHT)).apply { topMargin = dp(CARD_PADDING) })
+        logo.addView(caption, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(CARD_PADDING) })
+        logo.addView(light, LinearLayout.LayoutParams(scaled(SPLASH_WORDMARK_WIDTH), dp(TRIM_HEIGHT)).apply { topMargin = dp(HERO_ACTION_GAP) })
         splash.addView(logo, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         root.addView(splash, FrameLayout.LayoutParams(-1, -1))
-        val easing = android.view.animation.DecelerateInterpolator()
-        crest.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f).setDuration(1000).setInterpolator(easing).start()
-        script.animate().alpha(1f).setStartDelay(350).setDuration(1000).setInterpolator(easing).start()
-        light.animate().alpha(1f).scaleX(1f).setStartDelay(700).setDuration(1600).setInterpolator(easing).start()
+        val easing = android.view.animation.DecelerateInterpolator(1.6f)
+        glow.animate().alpha(1f).setDuration(1400).setInterpolator(easing).start()
+        crest.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f).setStartDelay(250).setDuration(1100).setInterpolator(easing).start()
+        script.post {
+            val reveal = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+                startDelay = 900; duration = 1200; interpolator = easing
+                addUpdateListener {
+                    val w = script.width; val h = script.height
+                    script.clipBounds = android.graphics.Rect(0, 0, (w * (it.animatedValue as Float)).toInt(), h)
+                }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) { script.clipBounds = null }
+                })
+            }
+            script.clipBounds = android.graphics.Rect(0, 0, 0, script.height)
+            reveal.start()
+        }
+        caption.animate().alpha(1f).setStartDelay(1700).setDuration(900).setInterpolator(easing).start()
+        light.animate().alpha(1f).scaleX(1f).setStartDelay(1900).setDuration(1300).setInterpolator(easing).start()
         val started = android.os.SystemClock.elapsedRealtime()
         fun finishWhenReady() {
             if (destroyed) return
             val elapsed = android.os.SystemClock.elapsedRealtime() - started
             if (elapsed >= SPLASH_MIN_MS && (ready.get() || elapsed >= SPLASH_MAX_MS)) {
-                splash.animate().alpha(0f).setDuration(400).withEndAction { root.removeView(splash) }.start()
+                playHomeEntrance()
+                splash.animate().alpha(0f).setDuration(500).withEndAction { root.removeView(splash) }.start()
             } else main.postDelayed({ finishWhenReady() }, 100)
         }
         main.postDelayed({ finishWhenReady() }, SPLASH_MIN_MS)
+    }
+
+    private var heroParts: List<View> = emptyList()
+
+    /** One-shot staggered rise of the home elements; nothing loops. */
+    private fun playHomeEntrance() {
+        val easing = android.view.animation.DecelerateInterpolator(1.4f)
+        heroParts.forEachIndexed { index, view ->
+            view.animate().alpha(1f).translationY(0f).setStartDelay(index * 90L).setDuration(650).setInterpolator(easing).start()
+        }
     }
 
     private fun createSettingsContent(): View {
@@ -244,7 +293,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         row("Reconnect iPhone", "Restart the tablet hotspot and reconnect now") { prepareWireless(true) }
         row("Pair iPhone", "Open Bluetooth settings to pair a new phone") { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
         row("Choose iPhone", "Select the paired phone to use next time") { choosePreferredPhone() }
-        row("Hotspot password", "DiPlay-Tablet · change the password for the next connection") { editHotspotPassword() }
+        row("Hotspot password", "$HOTSPOT_SSID · change the password for the next connection") { editHotspotPassword() }
         row("Other wireless modes", "Use an existing Wi-Fi network or configure the hotspot") { prepareWireless(false) }
         row("Start wired", "Connect an iPhone using a USB OTG adapter") { stopConnection(); wireless = false; prepareConnection() }
         row("Stop", "Disconnect CarPlay and turn off the app's hotspot") { stopConnection(); showStatus("Stopped. Ready when you are.") }
@@ -383,7 +432,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
 
     private fun configureTabletHotspot(phone: BluetoothDevice) {
         val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
-        val network = "DiPlay-Tablet"
+        val network = HOTSPOT_SSID
         val secret = prefs.getString("hotspot_password", null) ?: java.util.UUID.randomUUID().toString().replace("-", "").take(16)
         val fields = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 8, 24, 8) }
         fields.addView(TextView(this).apply {
@@ -422,7 +471,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
             setSingleLine(); setText(hotspotPassword())
         }
         val dialog = AlertDialog.Builder(this).setTitle("Hotspot password")
-            .setMessage("Network: DiPlay-Tablet. Changes apply the next time you connect.")
+            .setMessage("Network: $HOTSPOT_SSID. Changes apply the next time you connect.")
             .setView(input).setPositiveButton("Save", null).setNegativeButton("Cancel", null).create()
         dialog.setOnShowListener { dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val value = input.text.toString()
@@ -435,7 +484,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     private fun beginTabletConnection(phone: BluetoothDevice, secret: String) {
         val ap = TabletHotspot(this)
         tabletHotspot = ap
-        hotspotMode = true; wireless = true; wirelessSsid = "DiPlay-Tablet"; wirelessPassword = secret; selectedPhone = phone.address
+        hotspotMode = true; wireless = true; wirelessSsid = HOTSPOT_SSID; wirelessPassword = secret; selectedPhone = phone.address
         getSharedPreferences("legacy", MODE_PRIVATE).edit().putString("hotspot_password", secret).putString("phone", phone.address).apply()
         setConnecting(true)
         showStatus("Restarting tablet hotspot. Accept the CarPlay connection on your iPhone.")
@@ -496,7 +545,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         val apLabel = when (ap) { 10 -> "Stopping"; 11 -> "Off"; 12 -> "Starting"; 13 -> "On"; 14 -> "Failed"; else -> "Not reported by firmware" }
         val usbHost = packageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)
         return "Bluetooth: $bluetooth\nTablet hotspot: $apLabel\nWi-Fi client: ${if (wifi?.isWifiEnabled == true) "On" else "Off (normal while hosting)"}\nUSB host support: ${if (usbHost) "Yes" else "No"}\nCarPlay session: ${if (carPlayActive) "Connected" else "Not connected"}\n\n" +
-            "Default connection: DiPlay-Tablet hotspot + Bluetooth. Keep Wi-Fi and Bluetooth enabled on the iPhone.\n\n" +
+            "Default connection: $HOTSPOT_SSID hotspot + Bluetooth. Keep Wi-Fi and Bluetooth enabled on the iPhone.\n\n" +
             "Internet test: while connected, search Google Maps on the iPhone for a new destination. The iPhone needs cellular data; the tablet hotspot provides only the local CarPlay link."
     }
 
@@ -504,7 +553,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
 
     private fun showAppInformation() {
         val version = packageManager.getPackageInfo(packageName, 0).versionName
-        showResult("About DiPlay", "DiPlay $version\n${Build.MANUFACTURER} ${Build.MODEL}\nAndroid ${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}\n\nCarPlay video: H.264 · 800 × 480 · up to 30 fps\nConnection: tablet hotspot + Bluetooth, existing Wi-Fi, or USB OTG\nDisplay: automatic fullscreen, controls hidden during CarPlay\nMicrophone / Siri: unavailable in this experimental tablet build\n\nCadillac artwork sources and Unslop design credit are included with the source code.")
+        showResult("About Cadillac CTS Dashboard", "Cadillac CTS Dashboard $version\n${Build.MANUFACTURER} ${Build.MODEL}\nAndroid ${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}\n\nCarPlay video: H.264 · 800 × 480 · up to 30 fps\nConnection: tablet hotspot + Bluetooth, existing Wi-Fi, or USB OTG\nDisplay: automatic fullscreen, controls hidden during CarPlay\nMicrophone / Siri: unavailable in this experimental tablet build\n\nCadillac artwork sources and Unslop design credit are included with the source code.")
     }
 
     private fun testSound() {
@@ -778,24 +827,26 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val CARD_RADIUS = 16
         private const val BUTTON_HEIGHT = 56
         private const val HOME_HEADER_HEIGHT = 88
-        private const val CONNECT_WIDTH = 360
-        private const val CONNECT_HEIGHT = 88
+        private const val CONNECT_WIDTH = 440
+        private const val CONNECT_HEIGHT = 96
         private const val ICON_TARGET = 56
-        private const val HERO_CREST_WIDTH = 132
-        private const val HERO_CREST_HEIGHT = 50
-        private const val HERO_ACTION_GAP = 32
+        private const val HERO_CREST_WIDTH = 240
+        private const val HERO_CREST_HEIGHT = 91
+        private const val HERO_WORDMARK_WIDTH = 340
+        private const val HERO_WORDMARK_HEIGHT = 91
+        private const val HERO_ACTION_GAP = 40
         private const val SECTION_GAP = 24
         private const val ROW_GAP = 8
         private const val TEXT_LINE_GAP = 4
         private const val SETTINGS_ROW_HEIGHT = 88
-        private const val SPLASH_MIN_MS = 2800L
-        private const val SPLASH_MAX_MS = 6000L
-        private const val SPLASH_CREST_WIDTH = 160
-        private const val SPLASH_CREST_HEIGHT = 60
-        private const val SPLASH_WORDMARK_WIDTH = 224
-        private const val SPLASH_WORDMARK_HEIGHT = 60
-        private const val CREST_WIDTH = 72
-        private const val CREST_HEIGHT = 28
+        private const val SPLASH_MIN_MS = 3800L
+        private const val SPLASH_MAX_MS = 7000L
+        private const val SPLASH_CREST_WIDTH = 300
+        private const val SPLASH_CREST_HEIGHT = 114
+        private const val SPLASH_WORDMARK_WIDTH = 420
+        private const val SPLASH_WORDMARK_HEIGHT = 113
+        private const val CREST_WIDTH = 96
+        private const val CREST_HEIGHT = 37
         private const val WORDMARK_WIDTH = 128
         private const val WORDMARK_HEIGHT = 36
         private const val BRAND_HEIGHT = 56
@@ -808,13 +859,14 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private val MUTED = 0xffa6aaaf.toInt()
         private val HAIRLINE = 0xff34383e.toInt()
         private const val TAG = "DiPlay-Legacy"
+        private const val HOTSPOT_SSID = "Cadillac CTS"
         private const val VPN_REQUEST = 101
         private const val BLUETOOTH_REQUEST = 102
         private const val BLUETOOTH_PERMISSION = 103
         internal fun connectionStatus(value: CarPlayStatus): String = when (value) {
             is CarPlayStatus.Failed -> value.message
             CarPlayStatus.WaitingForIphone -> "Connect and unlock the iPhone using USB OTG. Accept Trust and USB permission prompts."
-            CarPlayStatus.RequestingIphonePermission -> "Allow DiPlay to access the connected iPhone."
+            CarPlayStatus.RequestingIphonePermission -> "Allow Cadillac CTS Dashboard to access the connected iPhone."
             CarPlayStatus.Pairing -> "Pairing with iPhone. Accept Trust on the phone if asked."
             CarPlayStatus.RunningControl -> "Connected. Waiting for CarPlay video."
             CarPlayStatus.StartingHotspot -> "Preparing the Wi-Fi connection…"

@@ -40,8 +40,8 @@ class TabletHotspotTest {
         } catch (_: IllegalStateException) { assertFalse(enabled) }
     }
     @Test fun accessPointUsesRawCredentialsAndWpa2InsteadOfStationKeyManagement() {
-        val config = TabletHotspot.configuration("DiPlay-Tablet", "example-pass-123")
-        assertEquals("DiPlay-Tablet", config.SSID)
+        val config = TabletHotspot.configuration("Cadillac CTS", "example-pass-123")
+        assertEquals("Cadillac CTS", config.SSID)
         assertEquals("example-pass-123", config.preSharedKey)
         assertEquals(1, config.allowedKeyManagement.cardinality())
         assertTrue(config.allowedKeyManagement[4])

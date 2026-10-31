@@ -2,7 +2,7 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
-    <application android:label="DiPlay" android:icon="@drawable/ic_launcher_cadillac" android:theme="@style/TabletTheme"
+    <application android:label="Cadillac CTS Dashboard" android:icon="@drawable/ic_launcher_cadillac" android:theme="@style/TabletTheme"
         android:allowBackup="false" android:supportsRtl="true" android:usesCleartextTraffic="true">
         <!-- Removal directives are not runtime registrations; these services are absent from the merged APK. -->
         <service android:name="com.shilapi.xcertplay.shared.MyCarAppService" tools:node="remove" tools:ignore="MissingClass" />
