@@ -5,7 +5,7 @@ UI review follows [Unslop](https://github.com/heydamir/unslop) by Damir Sokolovs
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 The guidance is adapted to native Android views and this Android 5.1 tablet.
 
-Home is named Cadillac CTS Dashboard. It contains a large centered crest and script, a CTS DASHBOARD caption, one Connect to iPhone button and a Settings gear at the top right. Connect uses the
+Home is named Cadillac CTS Dashboard. It contains the centered crest and script, one champagne Connect to iPhone button and a Settings gear at the top right. Connect uses the
 saved paired iPhone, Bluetooth, and the tablet's own WPA2 hotspot (SSID Cadillac CTS) by default. Mode
 selection and password dialogs are kept out of this default flow. Settings holds
 pairing, wired/alternative wireless modes, hotspot password, status, and Stop.
@@ -32,4 +32,4 @@ CarPlay hides it again. Sticky immersive mode hides both Android bars and is
 reapplied after window focus returns. Android permits a temporary edge swipe to
 reveal its navigation controls.
 
-Splash (about 3.8 s minimum, 7 s maximum while startup finishes): a champagne spotlight fades in, the crest rises and scales up, the script is revealed left to right, the caption fades in and a gold line grows from the centre, then home elements rise in one after another. All animations run once.
+Settings has a Video section: resolution presets (640 × 384, 800 × 480 default, 1024 × 600 native, 1280 × 720 experimental) and frame rate (20, 24, 30 fps). Choices apply the next time CarPlay connects; touch is normalized, so every size maps correctly.
