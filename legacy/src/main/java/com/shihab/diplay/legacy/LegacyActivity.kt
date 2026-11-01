@@ -139,12 +139,14 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         hero.addView(ImageView(this).apply {
             setImageResource(R.drawable.cadillac_logo_name); contentDescription = "Cadillac"
         }, LinearLayout.LayoutParams(dp(HERO_LOGO_WIDTH), dp(HERO_LOGO_HEIGHT)))
-        val lighting = TextView(this).apply {
-            text = "Lighting"; contentDescription = "Lighting"; isClickable = true
-            gravity = Gravity.CENTER; textSize = 13f; setTextColor(FOREGROUND)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            background = RippleDrawable(ColorStateList.valueOf(0x22e9e7e2), panel(CARD).apply { setStroke(dp(1), HAIRLINE) }, null)
-            setOnClickListener { openLighting() }
+        val lighting = iconButton(R.drawable.ic_lighting, "Lighting") { openLighting() }.apply {
+            scaleType = ImageView.ScaleType.CENTER; setPadding(0, 0, 0, 0)
+            // Dark glass panel with a fine champagne edge, matching the Connect button's colours.
+            val glass = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xff24262b.toInt(), 0xff0f1012.toInt())).apply {
+                cornerRadius = dp(CARD_RADIUS).toFloat(); setStroke(dp(1), 0x99e9dcb8.toInt())
+            }
+            background = RippleDrawable(ColorStateList.valueOf(0x33e9dcb8), glass, null)
+            elevation = dp(4).toFloat()
         }
         lightingButton = lighting
         (home as FrameLayout).addView(lighting, FrameLayout.LayoutParams(dp(LIGHTING_BUTTON), dp(LIGHTING_BUTTON), Gravity.TOP or Gravity.START).apply {
@@ -214,11 +216,12 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         if (idle || destroyed || settingsOpen || dashboard.visibility != View.VISIBLE || home.visibility != View.VISIBLE) return
         idle = true
         idleOverlay.animate().cancel(); idleOverlay.visibility = View.VISIBLE
-        idleOverlay.animate().alpha(IDLE_DIM_ALPHA).setDuration(IDLE_FADE_MS).start()
+        idleOverlay.animate().alpha(IDLE_DIM_ALPHA).setDuration(IDLE_FADE_MS).setInterpolator(android.view.animation.DecelerateInterpolator(1.4f)).start()
         // The logo sits above the Connect row; move it down by half that row so it ends up centred once the row is gone.
         val rowShift = (actionsRow.height + dp(HERO_ACTION_GAP)) / 2f * IDLE_LOGO_SCALE
         heroView.animate().cancel()
-        heroView.animate().scaleX(IDLE_LOGO_SCALE).scaleY(IDLE_LOGO_SCALE).translationY(rowShift).setDuration(IDLE_FADE_MS).start()
+        heroView.animate().scaleX(IDLE_LOGO_SCALE).scaleY(IDLE_LOGO_SCALE).translationY(rowShift).setDuration(IDLE_FADE_MS)
+            .setInterpolator(android.view.animation.DecelerateInterpolator(1.4f)).withLayer().start()
         for (view in listOf(gearButton, lightingButton, actionsRow)) {
             view.animate().cancel()
             view.animate().alpha(0f).setDuration(IDLE_FADE_MS).withEndAction { if (idle) view.visibility = View.INVISIBLE }.start()
@@ -230,7 +233,8 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         idleOverlay.animate().cancel()
         idleOverlay.animate().alpha(0f).setDuration(WAKE_FADE_MS).withEndAction { if (!idle) idleOverlay.visibility = View.GONE }.start()
         heroView.animate().cancel()
-        heroView.animate().scaleX(1f).scaleY(1f).translationY(0f).setDuration(WAKE_FADE_MS).start()
+        heroView.animate().scaleX(1f).scaleY(1f).translationY(0f).setDuration(WAKE_FADE_MS)
+            .setInterpolator(android.view.animation.DecelerateInterpolator(1.4f)).withLayer().start()
         for (view in listOf(gearButton, lightingButton, actionsRow)) {
             view.animate().cancel(); view.visibility = View.VISIBLE
             view.animate().alpha(1f).setDuration(WAKE_FADE_MS).start()
@@ -261,9 +265,20 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         main.removeCallbacks(idleRunnable)
         settingsOpen = true
         home.visibility = View.GONE
-        settingsPage.visibility = View.VISIBLE
-        settingsPage.alpha = 0f
-        settingsPage.animate().alpha(1f).setDuration(140).start()
+        slideIn(settingsPage, true)
+    }
+
+    /**
+     * Pages swap with the old one gone at once and the new one easing in: a short fade plus a small slide on a hardware
+     * layer, so the weak GPU only moves one flat texture. Going forward slides in from the right, going Home from the left.
+     */
+    private fun slideIn(page: View, fromRight: Boolean) {
+        page.animate().cancel()
+        page.visibility = View.VISIBLE
+        page.alpha = 0f
+        page.translationX = dp(PAGE_SLIDE) * (if (fromRight) 1 else -1).toFloat()
+        page.animate().alpha(1f).translationX(0f).setDuration(PAGE_IN_MS)
+            .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f)).withLayer().start()
     }
 
     /** The lighting page: the car-interior line art, tinted with the colour picked from the dots along the bottom. */
@@ -273,9 +288,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         lightingOpen = true
         home.visibility = View.GONE
         refreshLedSwatches()
-        page.visibility = View.VISIBLE
-        page.alpha = 0f
-        page.animate().alpha(1f).setDuration(140).start()
+        slideIn(page, true)
     }
 
     private fun buildLightingPage(): FrameLayout {
@@ -292,8 +305,8 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
             setBackgroundColor(Color.BLACK); isClickable = true; visibility = View.GONE
             addView(lines, FrameLayout.LayoutParams(-1, -1))
             addView(swatches, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(LED_SWATCH_MARGIN) })
-            addView(iconButton(R.drawable.ic_home, "Home") { showHome() }, FrameLayout.LayoutParams(dp(ICON_TARGET), dp(ICON_TARGET), Gravity.TOP or Gravity.END).apply {
-                topMargin = dp(PAGE_PADDING); marginEnd = dp(PAGE_PADDING)
+            addView(iconButton(R.drawable.ic_home, "Home") { showHome() }, FrameLayout.LayoutParams(dp(LIGHTING_BUTTON), dp(LIGHTING_BUTTON), Gravity.TOP or Gravity.START).apply {
+                topMargin = dp(PAGE_PADDING); marginStart = dp(PAGE_PADDING) // exactly where the Lighting button sits on Home
             })
         }
     }
@@ -315,9 +328,9 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     private fun showHome() {
         settingsOpen = false
         lightingOpen = false
-        lightingPage?.visibility = View.GONE
-        settingsPage.visibility = View.GONE
-        home.visibility = View.VISIBLE
+        lightingPage?.let { it.animate().cancel(); it.visibility = View.GONE }
+        settingsPage.animate().cancel(); settingsPage.visibility = View.GONE
+        slideIn(home, false)
         scheduleIdle()
     }
 
@@ -1134,8 +1147,10 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val ICON_TARGET = 56
         private const val HERO_LOGO_WIDTH = 232
         private const val HERO_LOGO_HEIGHT = 159
-        private const val LIGHTING_BUTTON = 64
+        private const val LIGHTING_BUTTON = 96
         private const val LIGHTING_FADE_MS = 260L
+        private const val PAGE_IN_MS = 220L
+        private const val PAGE_SLIDE = 28
         private const val LIGHTING_DEFAULT_TINT = 0xffa000ff.toInt()
         private const val LIGHTING_OFF_TINT = 0xff3a3d42.toInt()
         private const val HERO_ACTION_GAP = 32
