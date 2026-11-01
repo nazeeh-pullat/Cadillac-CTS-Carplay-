@@ -235,13 +235,21 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         return "$name · ${led.summary}"
     }
 
-    private fun swatchBackground(color: LedColor, selected: Boolean) = GradientDrawable().apply {
+    /** Square-cut strips, flush with the left edge; the "off" strip is dark grey so it still shows on the black theme. */
+    private fun swatchBackground(color: LedColor) = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
-        val r = dp(6).toFloat()
-        cornerRadii = floatArrayOf(0f, 0f, r, r, r, r, 0f, 0f) // flush with the left edge, rounded on the right
-        setColor(if (color.name == "off") 0xff101214.toInt() else color.argb)
-        setStroke(dp(if (selected) 2 else 1), if (selected) Color.WHITE else 0x55ffffff)
+        setColor(if (color.name == "off") 0xff2b2e33.toInt() else color.argb)
     }
+
+    /** The chosen strip sticks out furthest; the two strips either side of it step down towards the resting width. */
+    private fun swatchWidthDp(index: Int, selected: Int) = when (if (selected < 0) 3 else kotlin.math.abs(index - selected)) {
+        0 -> LED_BAR_SELECTED_WIDTH
+        1 -> LED_BAR_NEIGHBOUR_WIDTH
+        2 -> LED_BAR_SECOND_WIDTH
+        else -> LED_BAR_WIDTH
+    }
+
+    private fun swatchElevation(index: Int, selected: Int) = dp(if (index == selected) 8 else 4).toFloat()
 
     private fun swatchBarHeightDp() =
         minOf(44, (resources.configuration.screenHeightDp - LED_BAR_RESERVED) / LedModes.palette.size - LED_BAR_GAP)
@@ -264,12 +272,15 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
             }
         }.apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            clipChildren = false; clipToPadding = false // let the drop shadows spill past the strips
+            val selected = LedModes.colorIndex(prefs)
             LedModes.palette.forEachIndexed { index, color ->
                 addView(View(this@LegacyActivity).apply {
                     contentDescription = "LED ${color.name}"; isClickable = true
-                    background = swatchBackground(color, index == LedModes.colorIndex(prefs))
+                    background = swatchBackground(color)
+                    elevation = swatchElevation(index, selected)
                     setOnClickListener { pickLed(index) }
-                }, LinearLayout.LayoutParams(dp(if (index == LedModes.colorIndex(prefs)) LED_BAR_SELECTED_WIDTH else LED_BAR_WIDTH), dp(height)).apply {
+                }, LinearLayout.LayoutParams(dp(swatchWidthDp(index, selected)), dp(height)).apply {
                     topMargin = dp(LED_BAR_GAP) / 2; bottomMargin = dp(LED_BAR_GAP) - dp(LED_BAR_GAP) / 2
                 })
             }
@@ -282,8 +293,9 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         val selected = LedModes.colorIndex(prefs)
         LedModes.palette.forEachIndexed { index, color ->
             val bar = ledSwatches.getChildAt(index)
-            bar.background = swatchBackground(color, index == selected)
-            bar.layoutParams = (bar.layoutParams as LinearLayout.LayoutParams).apply { width = dp(if (index == selected) LED_BAR_SELECTED_WIDTH else LED_BAR_WIDTH) }
+            bar.background = swatchBackground(color)
+            bar.elevation = swatchElevation(index, selected)
+            bar.layoutParams = (bar.layoutParams as LinearLayout.LayoutParams).apply { width = dp(swatchWidthDp(index, selected)) }
         }
     }
 
@@ -1025,6 +1037,8 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val LINE_HEIGHT = 24
         private const val LED_BAR_WIDTH = 34
         private const val LED_BAR_SELECTED_WIDTH = 70
+        private const val LED_BAR_NEIGHBOUR_WIDTH = 55
+        private const val LED_BAR_SECOND_WIDTH = 44
         private const val LED_BAR_RESERVED = 24
         private const val LED_BAR_GAP = 2
         private const val LINE_MARGIN = 36
