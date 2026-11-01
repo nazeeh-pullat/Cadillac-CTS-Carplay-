@@ -72,6 +72,16 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var actionsRow: View
     private lateinit var idleOverlay: View
     private lateinit var heroView: View
+    private lateinit var clockBlock: View
+    private lateinit var statusPill: View
+    private lateinit var statusDot: View
+    private lateinit var statusLabel: TextView
+    private var retryAttempt = 0
+    private var retryPending = false
+    private var gaveUp = false
+    private var userStopped = false
+    private val retryRunnable = Runnable { retryPending = false; updateLink(); autoConnect() }
+    private var phoneReceiver: android.content.BroadcastReceiver? = null
     private var idle = false
     private var swallowGesture = false
     private val idleRunnable = Runnable { enterIdle() }
@@ -105,6 +115,8 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         root.addView(dashboard, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
         enterImmersiveMode()
+        watchPhoneBluetooth()
+        if (state == null) main.postDelayed({ autoConnect() }, AUTO_START_DELAY_MS)
         if (state == null) {
             val startup = StartupModes.get(getSharedPreferences("legacy", MODE_PRIVATE))
             val ready = startPreparation()
@@ -135,6 +147,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         (home as FrameLayout).addView(gear, FrameLayout.LayoutParams(dp(ICON_TARGET), dp(ICON_TARGET), Gravity.TOP or Gravity.END).apply {
             topMargin = dp(PAGE_PADDING); marginEnd = dp(PAGE_PADDING)
         })
+        buildClockAndStatus()
         val hero = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         hero.addView(ImageView(this).apply {
             setImageResource(R.drawable.cadillac_logo_name); contentDescription = "Cadillac"
@@ -171,7 +184,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
             }
             background = RippleDrawable(ColorStateList.valueOf(0x44ffffff), red, null)
             visibility = View.GONE
-            setOnClickListener { stopConnection(); showStatus("Disconnected. Ready when you are.") }
+            setOnClickListener { userStop(); showStatus("Disconnected. Ready when you are.") }
         }
         val gap = dp(BLOCK_GAP)
         val buttonWidth = minOf(CONNECT_WIDTH, resources.configuration.screenWidthDp - PAGE_PADDING * 2 - CONNECT_HEIGHT - BLOCK_GAP)
@@ -222,7 +235,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         heroView.animate().cancel()
         heroView.animate().scaleX(IDLE_LOGO_SCALE).scaleY(IDLE_LOGO_SCALE).translationY(rowShift).setDuration(IDLE_FADE_MS)
             .setInterpolator(android.view.animation.DecelerateInterpolator(1.4f)).withLayer().start()
-        for (view in listOf(gearButton, lightingButton, actionsRow)) {
+        for (view in listOf(gearButton, lightingButton, actionsRow, clockBlock, statusPill)) {
             view.animate().cancel()
             view.animate().alpha(0f).setDuration(IDLE_FADE_MS).withEndAction { if (idle) view.visibility = View.INVISIBLE }.start()
         }
@@ -235,7 +248,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         heroView.animate().cancel()
         heroView.animate().scaleX(1f).scaleY(1f).translationY(0f).setDuration(WAKE_FADE_MS)
             .setInterpolator(android.view.animation.DecelerateInterpolator(1.4f)).withLayer().start()
-        for (view in listOf(gearButton, lightingButton, actionsRow)) {
+        for (view in listOf(gearButton, lightingButton, actionsRow, clockBlock, statusPill)) {
             view.animate().cancel(); view.visibility = View.VISIBLE
             view.animate().alpha(1f).setDuration(WAKE_FADE_MS).start()
         }
@@ -544,12 +557,19 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         content.addView(status)
         section("Connection")
         row("Reconnect iPhone", "Restart the tablet hotspot and reconnect now") { prepareWireless(true) }
+        val autoRow = row("Auto-connect", autoConnectDetail()) { }
+        autoRow.setOnClickListener {
+            val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
+            AutoConnect.save(prefs, !AutoConnect.enabled(prefs))
+            if (AutoConnect.enabled(prefs)) { userStopped = false; autoConnect() } else cancelRetry()
+            autoRow.text = rowCopy("Auto-connect", autoConnectDetail())
+        }
         row("Pair iPhone", "Open Bluetooth settings to pair a new phone") { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
         row("Choose iPhone", "Select the paired phone to use next time") { choosePreferredPhone() }
         row("Hotspot password", "$HOTSPOT_SSID · change the password for the next connection") { editHotspotPassword() }
         row("Other wireless modes", "Use an existing Wi-Fi network or configure the hotspot") { prepareWireless(false) }
         row("Start wired", "Connect an iPhone using a USB OTG adapter") { stopConnection(); wireless = false; prepareConnection() }
-        row("Stop", "Disconnect CarPlay and turn off the app's hotspot") { stopConnection(); showStatus("Stopped. Ready when you are.") }
+        row("Stop", "Disconnect CarPlay and turn off the app's hotspot") { userStop(); showStatus("Stopped. Ready when you are.") }
         section("LED strip")
         val ledPrefs = getSharedPreferences("legacy", MODE_PRIVATE)
         val ledRow = row("LED strip", ledDetail(ledPrefs)) { }
@@ -569,7 +589,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         row("Test colours", "Cycle red, green and blue on the saved strip") { testLed() }
         val protocolRow = row("Controller type", "${LedModes.protocol(ledPrefs).label} · change if the colours do not match") { }
         protocolRow.setOnClickListener { chooseLedProtocol { protocolRow.text = rowCopy("Controller type", "${LedModes.protocol(ledPrefs).label} · change if the colours do not match") } }
-        row("Forget LED strip", "Remove the saved strip and hide the colour swatches from Home") {
+        row("Forget LED strip", "Remove the saved strip and stop sending colours to it") {
             LedModes.forget(ledPrefs); led.close(); refreshLedSwatches(); ledRow.text = rowCopy("LED strip", ledDetail(ledPrefs))
         }
         section("Startup")
@@ -634,6 +654,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         val update = {
             if (!destroyed) {
                 carPlayActive = active
+                if (active) { main.removeCallbacks(retryRunnable); retryPending = false; retryAttempt = 0; gaveUp = false }
                 setConnecting(false)
                 returnToCarPlay.visibility = if (active) View.VISIBLE else View.GONE
                 if (active) showHome()
@@ -678,6 +699,8 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     @Suppress("DEPRECATION")
     private fun prepareWireless(useTabletHotspot: Boolean = directHotspot) {
         directHotspot = useTabletHotspot
+        userStopped = false
+        cancelRetry()
         stopConnection()
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), BLUETOOTH_PERMISSION)
@@ -814,12 +837,120 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         connectButton.contentDescription = if (carPlayActive && !connecting) "Return to iPhone" else "Connect to iPhone"
         disconnectButton.visibility = if (carPlayActive || connecting) View.VISIBLE else View.GONE
         if (connecting) connectButton.postOnAnimation(spinTick)
+        updateLink()
     }
 
     private fun connectionFailure(message: String) {
         showStatus(message)
         setConnecting(false)
-        Toast.makeText(this, "Could not connect. Open Settings for details.", Toast.LENGTH_LONG).show()
+        scheduleRetry()
+        if (!retryPending) Toast.makeText(this, "Could not connect. Open Settings for details.", Toast.LENGTH_LONG).show()
+    }
+
+    private fun autoConnectDetail() =
+        if (AutoConnect.enabled(getSharedPreferences("legacy", MODE_PRIVATE)))
+            "On · connects when the app opens and when your iPhone's Bluetooth appears, and retries if the link drops"
+        else "Off · tap Connect yourself"
+
+    private fun userStop() {
+        userStopped = true
+        cancelRetry()
+        stopConnection()
+    }
+
+    private fun cancelRetry() {
+        main.removeCallbacks(retryRunnable)
+        retryPending = false; retryAttempt = 0; gaveUp = false
+        updateLink()
+    }
+
+    /** Tries again after a growing pause, a few times; the iPhone's Bluetooth reconnecting later starts it afresh. */
+    private fun scheduleRetry() {
+        main.removeCallbacks(retryRunnable)
+        val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
+        if (destroyed || userStopped || !AutoConnect.enabled(prefs) || prefs.getString("phone", null) == null) {
+            retryPending = false; updateLink(); return
+        }
+        if (retryAttempt >= AutoConnect.MAX_ATTEMPTS) {
+            retryPending = false; gaveUp = true
+            showStatus("Auto-connect paused after ${AutoConnect.MAX_ATTEMPTS} tries. Tap Connect, or it resumes when your iPhone's Bluetooth connects.")
+            updateLink(); return
+        }
+        val delay = AutoConnect.retryDelayMs(retryAttempt)
+        retryAttempt++; retryPending = true; gaveUp = false
+        showStatus("Trying again in ${delay / 1000} s (attempt $retryAttempt of ${AutoConnect.MAX_ATTEMPTS})")
+        updateLink()
+        main.postDelayed(retryRunnable, delay)
+    }
+
+    /** Starts the saved iPhone's connection without any dialogs; does nothing when it cannot do so quietly. */
+    @SuppressLint("MissingPermission")
+    private fun autoConnect() {
+        val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
+        if (destroyed || userStopped || !AutoConnect.enabled(prefs) || carPlayActive || connectingNow) return
+        val saved = prefs.getString("phone", null) ?: return
+        try {
+            val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
+            if (!adapter.isEnabled) { adapter.enable(); scheduleRetry(); return }
+            val phone = adapter.bondedDevices.orEmpty().firstOrNull { it.address == saved } ?: return
+            stopConnection()
+            directHotspot = true
+            configureWireless(phone)
+        } catch (_: SecurityException) { /* needs a Bluetooth permission the user has not granted; Connect asks for it */ }
+    }
+
+    /** The saved iPhone's Bluetooth link coming up means the car is on and it is time to connect. */
+    @Suppress("DEPRECATION")
+    private fun watchPhoneBluetooth() {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE) ?: return
+                if (device.address != getSharedPreferences("legacy", MODE_PRIVATE).getString("phone", null)) return
+                userStopped = false; retryAttempt = 0; gaveUp = false
+                autoConnect()
+            }
+        }
+        phoneReceiver = receiver
+        registerReceiver(receiver, android.content.IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED))
+    }
+
+    private fun updateLink() {
+        if (!::statusLabel.isInitialized) return
+        val state = LinkState.of(carPlayActive, connectingNow, retryPending, gaveUp)
+        statusLabel.text = if (state == LinkState.RETRYING) "Reconnecting $retryAttempt/${AutoConnect.MAX_ATTEMPTS}" else state.label
+        (statusDot.background as GradientDrawable).setColor(state.dot)
+    }
+
+    /** A thin champagne clock at the top and a small link indicator above the line; both go quiet in dim mode. */
+    private fun buildClockAndStatus() {
+        val soft = 0x99e9dcb8.toInt()
+        fun clock(format12: String, format24: String, size: Float, color: Int, face: String, spacing: Float) = android.widget.TextClock(this).apply {
+            this.format12Hour = format12; this.format24Hour = format24
+            textSize = size; setTextColor(color); typeface = Typeface.create(face, Typeface.NORMAL); letterSpacing = spacing
+        }
+        val time = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL }
+        time.addView(clock("h:mm", "HH:mm", 38f, 0xffe9dcb8.toInt(), "sans-serif-thin", 0.06f))
+        val date = clock("EEE d MMM", "EEE d MMM", 11f, soft, "sans-serif-medium", 0.28f).apply { isAllCaps = true; gravity = Gravity.CENTER }
+        clockBlock = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+            addView(time); addView(date, LinearLayout.LayoutParams(-2, -2).apply { topMargin = -dp(2) })
+        }
+        (home as FrameLayout).addView(clockBlock, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(PAGE_PADDING - 8) })
+
+        statusDot = View(this).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(LinkState.READY.dot) } }
+        statusLabel = TextView(this).apply {
+            textSize = 11f; setTextColor(0xffb9b6ae.toInt()); letterSpacing = 0.18f; isAllCaps = true
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }
+        statusPill = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(7), dp(16), dp(7))
+            background = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0x66000000); setStroke(dp(1), 0x33e9dcb8) }
+            addView(statusDot, LinearLayout.LayoutParams(dp(8), dp(8)).apply { marginEnd = dp(9) })
+            addView(statusLabel)
+        }
+        (home as FrameLayout).addView(statusPill, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(STATUS_MARGIN) })
+        updateLink()
     }
 
     private fun showResult(title: String, message: String) {
@@ -992,7 +1123,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
                 listener = object : AirPlaySessionListener {
                     override val wantsTrace = false
                     override fun onSessionActive(session: AirPlaySession) { setCarPlayActive(true); showStatus("CarPlay connected") }
-                    override fun onSessionEnded(session: AirPlaySession) { setCarPlayActive(false); showStatus("iPhone disconnected. Tap Stop, then start your connection again.") }
+                    override fun onSessionEnded(session: AirPlaySession) { setCarPlayActive(false); showStatus("iPhone disconnected."); main.post { scheduleRetry() } }
                     override fun onTransportError(message: String) { showStatus(message) }
                     override fun onDebugLog(message: String) { diagnostic(message) }
                 },
@@ -1126,6 +1257,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     override fun onDestroy() {
         destroyed = true
         main.removeCallbacksAndMessages(null)
+        phoneReceiver?.let { runCatching { unregisterReceiver(it) } }
         testTone?.release()
         testTone = null
         stopConnection()
@@ -1148,6 +1280,8 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val HERO_LOGO_WIDTH = 232
         private const val HERO_LOGO_HEIGHT = 159
         private const val LIGHTING_BUTTON = 96
+        private const val STATUS_MARGIN = 72
+        private const val AUTO_START_DELAY_MS = 1500L
         private const val LIGHTING_FADE_MS = 260L
         private const val PAGE_IN_MS = 220L
         private const val PAGE_SLIDE = 28
