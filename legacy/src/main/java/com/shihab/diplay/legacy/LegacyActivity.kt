@@ -300,25 +300,30 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     }
 
     /** Square-cut strips, flush with the left edge; the "off" strip is dark grey so it still shows on the black theme. */
-    private fun swatchBackground(color: LedColor) = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        setColor(if (color.name == "off") 0xff2b2e33.toInt() else color.argb)
+    /** A square colour strip with a tight, dark shadow layer just behind its right and lower edges. */
+    private fun swatchBackground(color: LedColor): android.graphics.drawable.Drawable {
+        val shadow = GradientDrawable().apply { shape = GradientDrawable.RECTANGLE; setColor(0xcc000000.toInt()) }
+        val fill = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(if (color.name == "off") 0xff2b2e33.toInt() else color.argb)
+        }
+        return android.graphics.drawable.LayerDrawable(arrayOf(shadow, fill)).apply {
+            setLayerInset(0, 0, dp(1), -dp(SHADOW_REACH), -dp(SHADOW_REACH))
+        }
     }
 
-    /** The chosen strip sticks out furthest; the two strips either side of it step down towards the resting width. */
-    /** How far each strip sticks out, as a multiple of the resting width: the chosen one most, its neighbours less. */
-    private fun swatchScaleX(index: Int, selected: Int) = (when (if (selected < 0) 3 else kotlin.math.abs(index - selected)) {
-        0 -> LED_BAR_SELECTED_WIDTH
-        1 -> LED_BAR_NEIGHBOUR_WIDTH
-        2 -> LED_BAR_SECOND_WIDTH
-        else -> LED_BAR_WIDTH
-    }).toFloat() / LED_BAR_WIDTH
+    /** Width of a strip, in dp, by how many strips it is from the chosen one: the lift fades out over four strips either side. */
+    private fun swatchWidthDp(distance: Int) = SWATCH_WIDTHS.getOrElse(distance) { LED_BAR_WIDTH }
+    private fun swatchDistance(index: Int, selected: Int) = if (selected < 0) SWATCH_WIDTHS.size else kotlin.math.abs(index - selected)
 
-    /** The chosen strip is also taller, so it reads as lifted off the stack. */
-    private fun swatchScaleY(index: Int, selected: Int) = if (index == selected) 1.5f else 1f
+    /** How far each strip sticks out, as a multiple of the resting width. */
+    private fun swatchScaleX(index: Int, selected: Int) = swatchWidthDp(swatchDistance(index, selected)).toFloat() / LED_BAR_WIDTH
 
-    private fun swatchElevation(index: Int, selected: Int) = dp(if (index == selected) 20 else 5).toFloat()
+    /** The chosen strip is also taller, with the strips next to it growing a little, so it reads as lifted off the stack. */
+    private fun swatchScaleY(index: Int, selected: Int) = SWATCH_HEIGHTS.getOrElse(swatchDistance(index, selected)) { 1f }
 
+    /** A small lift sorts the strips (the chosen one on top); the darker shadow layer does the visible work. */
+    private fun swatchElevation(index: Int, selected: Int) = dp(SWATCH_LIFT.getOrElse(swatchDistance(index, selected)) { 1 }).toFloat()
     private fun swatchBarHeightDp() =
         minOf(44, ((resources.configuration.screenHeightDp - LED_BAR_RESERVED) / (LedModes.palette.size + 0.5f)).toInt() - LED_BAR_GAP)
 
@@ -1121,9 +1126,10 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val SPLASH_SHORT_HOLD_MS = 150L
         private const val LINE_HEIGHT = 24
         private const val LED_BAR_WIDTH = 44
-        private const val LED_BAR_SELECTED_WIDTH = 100
-        private const val LED_BAR_NEIGHBOUR_WIDTH = 74
-        private const val LED_BAR_SECOND_WIDTH = 58
+        private val SWATCH_WIDTHS = intArrayOf(140, 114, 92, 74, 58)
+        private val SWATCH_HEIGHTS = floatArrayOf(2.0f, 1.3f, 1.12f, 1.04f, 1f)
+        private val SWATCH_LIFT = intArrayOf(6, 4, 3, 2, 2)
+        private const val SHADOW_REACH = 4
         private const val IDLE_DIM_ALPHA = 0.82f
         private const val IDLE_FADE_MS = 900L
         private const val SWATCH_ANIMATION_MS = 110L
