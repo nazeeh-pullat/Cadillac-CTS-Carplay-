@@ -119,7 +119,7 @@ class LegacyActivityTest {
         else -> emptyList()
     }
 
-    @Test fun ledSwatchesStayHiddenUntilAStripIsSaved() {
+    @Test fun colourDotsLiveOnTheLightingPageNotOnHome() {
         val host = Robolectric.buildActivity(LegacyActivity::class.java).setup()
         try {
             val root = host.get().window.decorView
@@ -127,8 +127,18 @@ class LegacyActivityTest {
                 is ViewGroup -> (0 until view.childCount).flatMap { swatches(view.getChildAt(it)) }
                 else -> if (view.contentDescription?.startsWith("LED ") == true) listOf(view) else emptyList()
             }
+            fun find(view: View, description: String): View? = when {
+                view.contentDescription == description -> view
+                view is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { find(view.getChildAt(it), description) }
+                else -> null
+            }
+            assertTrue(swatches(root).isEmpty())
+            val lighting = find(root, "Lighting")!!
+            assertTrue(lighting.isShown)
+            lighting.performClick()
             assertTrue(swatches(root).isNotEmpty())
-            assertTrue(swatches(root).none { it.isShown })
+            assertTrue(swatches(root).all { it.isShown })
+            assertFalse(find(root, "Connect to iPhone")!!.isShown)
         } finally { host.pause().stop().destroy() }
     }
 
