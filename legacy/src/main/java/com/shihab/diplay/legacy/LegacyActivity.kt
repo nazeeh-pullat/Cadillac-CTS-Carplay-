@@ -157,7 +157,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         (home as FrameLayout).addView(hero, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         (home as FrameLayout).addView(CadillacLineView(this), FrameLayout.LayoutParams(-1, dp(LINE_HEIGHT), Gravity.BOTTOM).apply { bottomMargin = dp(LINE_MARGIN) })
         ledSwatches = buildLedSwatches()
-        (home as FrameLayout).addView(ledSwatches, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(LED_SWATCH_MARGIN) })
+        (home as FrameLayout).addView(ledSwatches, FrameLayout.LayoutParams(-2, -2, Gravity.START or Gravity.CENTER_VERTICAL))
         refreshLedSwatches()
         if (LedModes.address(getSharedPreferences("legacy", MODE_PRIVATE)) != null) led.connect()
         settingsPage = createSettingsContent().apply { visibility = View.GONE }
@@ -236,24 +236,30 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private fun swatchBackground(color: LedColor, selected: Boolean) = GradientDrawable().apply {
-        shape = GradientDrawable.OVAL
+        shape = GradientDrawable.RECTANGLE
+        val r = dp(6).toFloat()
+        cornerRadii = floatArrayOf(0f, 0f, r, r, r, r, 0f, 0f) // flush with the left edge, rounded on the right
         setColor(if (color.name == "off") 0xff101214.toInt() else color.argb)
-        setStroke(dp(if (selected) 3 else 1), if (selected) Color.WHITE else 0x55ffffff)
+        setStroke(dp(if (selected) 2 else 1), if (selected) Color.WHITE else 0x55ffffff)
     }
 
-    /** Colours only, no text: a quiet row of dots along the bottom of Home, shown once a strip is saved. */
+    private fun swatchBarHeightDp() =
+        minOf(30, ((resources.configuration.screenHeightDp - LED_BAR_RESERVED) / (LedModes.palette.size * 1.25f)).toInt())
+
+    /** Colours only, no text: strips stacked down the left edge of Home, shown once a strip is saved. The chosen one sticks out further. */
     private fun buildLedSwatches(): LinearLayout {
         val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
-        val size = minOf(40, ((resources.configuration.screenWidthDp - PAGE_PADDING * 2) / (LedModes.palette.size * 1.35f)).toInt())
-        val gap = dp(maxOf(6, size / 4))
+        val height = swatchBarHeightDp()
         return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.START or Gravity.CENTER_VERTICAL
             LedModes.palette.forEachIndexed { index, color ->
                 addView(View(this@LegacyActivity).apply {
                     contentDescription = "LED ${color.name}"; isClickable = true
                     background = swatchBackground(color, index == LedModes.colorIndex(prefs))
                     setOnClickListener { pickLed(index) }
-                }, LinearLayout.LayoutParams(dp(size), dp(size)).apply { marginStart = gap / 2; marginEnd = gap / 2 })
+                }, LinearLayout.LayoutParams(dp(if (index == LedModes.colorIndex(prefs)) LED_BAR_SELECTED_WIDTH else LED_BAR_WIDTH), dp(height)).apply {
+                    topMargin = dp(height / 5); bottomMargin = dp(height / 5)
+                })
             }
         }
     }
@@ -262,7 +268,11 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
         ledSwatches.visibility = if (LedModes.address(prefs) != null) View.VISIBLE else View.GONE
         val selected = LedModes.colorIndex(prefs)
-        LedModes.palette.forEachIndexed { index, color -> ledSwatches.getChildAt(index).background = swatchBackground(color, index == selected) }
+        LedModes.palette.forEachIndexed { index, color ->
+            val bar = ledSwatches.getChildAt(index)
+            bar.background = swatchBackground(color, index == selected)
+            bar.layoutParams = (bar.layoutParams as LinearLayout.LayoutParams).apply { width = dp(if (index == selected) LED_BAR_SELECTED_WIDTH else LED_BAR_WIDTH) }
+        }
     }
 
     private fun pickLed(index: Int) {
@@ -1001,7 +1011,9 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val SPLASH_HOLD_MS = 500L
         private const val SPLASH_SHORT_HOLD_MS = 150L
         private const val LINE_HEIGHT = 24
-        private const val LED_SWATCH_MARGIN = 78
+        private const val LED_BAR_WIDTH = 34
+        private const val LED_BAR_SELECTED_WIDTH = 70
+        private const val LED_BAR_RESERVED = 120
         private const val LINE_MARGIN = 36
         private const val SPLASH_MAX_MS = 8000L
         private const val SPLASH_WORDMARK_WIDTH = 224

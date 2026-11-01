@@ -19,7 +19,7 @@ State at 2026-11-01. Everything in this repository is committed and pushed to `c
 
 ```powershell
 $env:JAVA_HOME='<repo-parent>\tools\jdk25\jdk-25.0.5+8'; $env:ANDROID_HOME='<repo-parent>\tools\android-sdk'
-$env:GRADLE_USER_HOME='<repo-parent>\tools\gradle-cache'; $env:DIPLAY_AUTH_ASSETS_DIR='<repo-parent>\diplay-test\runtime-auth'
+$env:GRADLE_USER_HOME='<repo-parent>\tools\gradle-cache'; $env:ANDROID_USER_HOME='<repo-parent>\tools\android-user'; $env:DIPLAY_AUTH_ASSETS_DIR='<repo-parent>\diplay-test\runtime-auth'
 .\gradlew.bat --no-daemon -PlegacyAndroid51=true :legacy:assembleDebug :legacy:assembleDebugAndroidTest :legacy:testDebugUnitTest :legacy:lintDebug
 ```
 
@@ -44,7 +44,7 @@ bars hidden (`policy_control=immersive.full=*`), lock screen off, system animati
 
 ## LED ambient lights
 
-The dashboard can drive a Bluetooth LE LED controller (the kind controlled by the iPhone Lotus Lantern app). Settings > LED strip scans for devices, saves one, tests colours and picks the controller family (ELK-BLEDOM 7E...EF or Triones/LEDBLE 56...AA; auto-detected from the writable GATT characteristic). Once a strip is saved, Home shows a text-free row of colour dots above the bottom line; with no strip saved Home stays clean. Code: `LedStrip.kt`, `LedScannerDialog.kt`. **Hardware control is untested**: the scan works, but no strip was in range during development, and controllers allow one connection at a time, so close the iPhone app first.
+The dashboard can drive a Bluetooth LE LED controller (the kind controlled by the iPhone Lotus Lantern app). Settings > LED strip scans for devices, saves one, tests colours and picks the controller family (ELK-BLEDOM 7E...EF or Triones/LEDBLE 56...AA; auto-detected from the writable GATT characteristic). Once a strip is saved, Home shows text-free colour strips stacked down the left edge, the chosen one sticking out further (use `ANDROID_USER_HOME` above so the debug signing key matches the installed app and `adb install -r` works); with no strip saved Home stays clean. Code: `LedStrip.kt`, `LedScannerDialog.kt`. **Hardware control is untested**: the scan works, but no strip was in range during development, and controllers allow one connection at a time, so close the iPhone app first.
 
 ## Known issues and open items
 
