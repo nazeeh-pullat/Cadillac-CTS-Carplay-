@@ -65,6 +65,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var gearButton: View
     private lateinit var actionsRow: View
     private lateinit var idleOverlay: View
+    private lateinit var heroView: View
     private var idle = false
     private var swallowGesture = false
     private val idleRunnable = Runnable { enterIdle() }
@@ -171,6 +172,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         // Dims everything under the logo while Home is idle; the logo is brought back in front of it.
         idleOverlay = View(this).apply { setBackgroundColor(Color.BLACK); alpha = 0f; visibility = View.GONE }
         (home as FrameLayout).addView(idleOverlay, FrameLayout.LayoutParams(-1, -1))
+        heroView = hero
         hero.bringToFront()
         if (LedModes.address(getSharedPreferences("legacy", MODE_PRIVATE)) != null) led.connect()
         settingsPage = createSettingsContent().apply { visibility = View.GONE }
@@ -193,15 +195,22 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         if (!destroyed && seconds > 0) main.postDelayed(idleRunnable, seconds * 1000L)
     }
 
-    /** Home dims to the Cadillac logo alone, centred; Connect, Settings, the strips and the line fade away. */
+    /**
+     * Home dims to the Cadillac logo alone. The logo grows and glides to the middle while Connect, Settings, the strips and
+     * the line fade into the dark; everything is a short property animation, so it stays light on this tablet.
+     */
     private fun enterIdle() {
         if (idle || destroyed || settingsOpen || dashboard.visibility != View.VISIBLE || home.visibility != View.VISIBLE) return
         idle = true
         idleOverlay.animate().cancel(); idleOverlay.visibility = View.VISIBLE
         idleOverlay.animate().alpha(IDLE_DIM_ALPHA).setDuration(IDLE_FADE_MS).start()
+        // The logo sits above the Connect row; move it down by half that row so it ends up centred once the row is gone.
+        val rowShift = (actionsRow.height + dp(HERO_ACTION_GAP)) / 2f * IDLE_LOGO_SCALE
+        heroView.animate().cancel()
+        heroView.animate().scaleX(IDLE_LOGO_SCALE).scaleY(IDLE_LOGO_SCALE).translationY(rowShift).setDuration(IDLE_FADE_MS).start()
         for (view in listOf(gearButton, actionsRow)) {
             view.animate().cancel()
-            view.animate().alpha(0f).setDuration(IDLE_FADE_MS).withEndAction { if (idle) view.visibility = View.GONE }.start()
+            view.animate().alpha(0f).setDuration(IDLE_FADE_MS).withEndAction { if (idle) view.visibility = View.INVISIBLE }.start()
         }
     }
 
@@ -209,12 +218,13 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         idle = false
         idleOverlay.animate().cancel()
         idleOverlay.animate().alpha(0f).setDuration(WAKE_FADE_MS).withEndAction { if (!idle) idleOverlay.visibility = View.GONE }.start()
+        heroView.animate().cancel()
+        heroView.animate().scaleX(1f).scaleY(1f).translationY(0f).setDuration(WAKE_FADE_MS).start()
         for (view in listOf(gearButton, actionsRow)) {
             view.animate().cancel(); view.visibility = View.VISIBLE
             view.animate().alpha(1f).setDuration(WAKE_FADE_MS).start()
         }
     }
-
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         if (event.actionMasked == MotionEvent.ACTION_DOWN && idle) { wakeFromIdle(); swallowGesture = true }
         if (dashboard.visibility == View.VISIBLE) scheduleIdle()
@@ -300,30 +310,37 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     }
 
     /** Square-cut strips, flush with the left edge; the "off" strip is dark grey so it still shows on the black theme. */
-    /** A square colour strip with a tight, dark shadow layer just behind its right and lower edges. */
+    /** A square colour strip with a soft dark shadow behind its right and lower edges, faked with a few fading layers. */
     private fun swatchBackground(color: LedColor): android.graphics.drawable.Drawable {
-        val shadow = GradientDrawable().apply { shape = GradientDrawable.RECTANGLE; setColor(0xcc000000.toInt()) }
-        val fill = GradientDrawable().apply {
+        val layers = ArrayList<android.graphics.drawable.Drawable>()
+        repeat(SHADOW_STEPS) { layers.add(GradientDrawable().apply { shape = GradientDrawable.RECTANGLE; setColor(SHADOW_STEP_COLOUR) }) }
+        layers.add(GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             setColor(if (color.name == "off") 0xff2b2e33.toInt() else color.argb)
-        }
-        return android.graphics.drawable.LayerDrawable(arrayOf(shadow, fill)).apply {
-            setLayerInset(0, 0, dp(1), -dp(SHADOW_REACH), -dp(SHADOW_REACH))
+        })
+        return android.graphics.drawable.LayerDrawable(layers.toTypedArray()).apply {
+            // Outermost layer first, each one a step smaller, so the shadow is darkest at the edge and fades away.
+            for (i in 0 until SHADOW_STEPS) {
+                val reach = (SHADOW_STEPS - i) * SHADOW_STEP_DP
+                setLayerInset(i, 0, -dp(reach) / 2, -dp(reach), -dp(reach))
+            }
         }
     }
-
-    /** Width of a strip, in dp, by how many strips it is from the chosen one: the lift fades out over four strips either side. */
-    private fun swatchWidthDp(distance: Int) = SWATCH_WIDTHS.getOrElse(distance) { LED_BAR_WIDTH }
-    private fun swatchDistance(index: Int, selected: Int) = if (selected < 0) SWATCH_WIDTHS.size else kotlin.math.abs(index - selected)
+    /** 1 for the chosen strip, easing smoothly to 0 over [SWATCH_REACH] strips either side (a cosine bell). */
+    private fun swatchLift(index: Int, selected: Int): Float {
+        if (selected < 0) return 0f
+        val distance = kotlin.math.abs(index - selected)
+        return if (distance >= SWATCH_REACH) 0f else 0.5f + 0.5f * kotlin.math.cos(Math.PI * distance / SWATCH_REACH).toFloat()
+    }
 
     /** How far each strip sticks out, as a multiple of the resting width. */
-    private fun swatchScaleX(index: Int, selected: Int) = swatchWidthDp(swatchDistance(index, selected)).toFloat() / LED_BAR_WIDTH
+    private fun swatchScaleX(index: Int, selected: Int) = 1f + (SWATCH_PEAK_WIDTH.toFloat() / LED_BAR_WIDTH - 1f) * swatchLift(index, selected)
 
-    /** The chosen strip is also taller, with the strips next to it growing a little, so it reads as lifted off the stack. */
-    private fun swatchScaleY(index: Int, selected: Int) = SWATCH_HEIGHTS.getOrElse(swatchDistance(index, selected)) { 1f }
+    /** The chosen strip is also taller, and the strips around it swell with it, so it reads as lifted off the stack. */
+    private fun swatchScaleY(index: Int, selected: Int) = 1f + (SWATCH_PEAK_HEIGHT - 1f) * swatchLift(index, selected)
 
-    /** A small lift sorts the strips (the chosen one on top); the darker shadow layer does the visible work. */
-    private fun swatchElevation(index: Int, selected: Int) = dp(SWATCH_LIFT.getOrElse(swatchDistance(index, selected)) { 1 }).toFloat()
+    /** A small lift sorts the strips (the chosen one on top); the shadow layers do the visible work. */
+    private fun swatchElevation(index: Int, selected: Int) = dp(1 + (5 * swatchLift(index, selected)).toInt()).toFloat()
     private fun swatchBarHeightDp() =
         minOf(44, ((resources.configuration.screenHeightDp - LED_BAR_RESERVED) / (LedModes.palette.size + 0.5f)).toInt() - LED_BAR_GAP)
 
@@ -1126,14 +1143,17 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val SPLASH_SHORT_HOLD_MS = 150L
         private const val LINE_HEIGHT = 24
         private const val LED_BAR_WIDTH = 44
-        private val SWATCH_WIDTHS = intArrayOf(140, 114, 92, 74, 58)
-        private val SWATCH_HEIGHTS = floatArrayOf(2.0f, 1.3f, 1.12f, 1.04f, 1f)
-        private val SWATCH_LIFT = intArrayOf(6, 4, 3, 2, 2)
-        private const val SHADOW_REACH = 4
-        private const val IDLE_DIM_ALPHA = 0.82f
-        private const val IDLE_FADE_MS = 900L
+        private const val SWATCH_PEAK_WIDTH = 140
+        private const val SWATCH_PEAK_HEIGHT = 2.0f
+        private const val SWATCH_REACH = 6
+        private const val SHADOW_STEPS = 6
+        private const val SHADOW_STEP_DP = 1
+        private const val SHADOW_STEP_COLOUR = 0x40000000
+        private const val IDLE_DIM_ALPHA = 0.98f
+        private const val IDLE_FADE_MS = 1100L
+        private const val IDLE_LOGO_SCALE = 1.45f
         private const val SWATCH_ANIMATION_MS = 110L
-        private const val WAKE_FADE_MS = 200L
+        private const val WAKE_FADE_MS = 350L
         private const val LED_BAR_RESERVED = 24
         private const val LED_BAR_GAP = 2
         private const val LINE_MARGIN = 36
