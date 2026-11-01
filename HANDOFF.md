@@ -44,7 +44,14 @@ bars hidden (`policy_control=immersive.full=*`), lock screen off, system animati
 
 ## LED ambient lights
 
-The dashboard can drive a Bluetooth LE LED controller (the kind controlled by the iPhone Lotus Lantern app). Settings > LED strip scans for devices, saves one, tests colours and picks the controller family (ELK-BLEDOM 7E...EF or Triones/LEDBLE 56...AA; auto-detected from the writable GATT characteristic). Once a strip is saved, Home shows text-free colour strips stacked down the left edge, the chosen one sticking out further (use `ANDROID_USER_HOME` above so the debug signing key matches the installed app and `adb install -r` works); with no strip saved Home stays clean. Code: `LedStrip.kt`, `LedScannerDialog.kt`. **Hardware control is untested**: the scan works, but no strip was in range during development, and controllers allow one connection at a time, so close the iPhone app first.
+The dashboard can drive a Bluetooth LE LED controller (the kind controlled by the iPhone Lotus Lantern app). Settings > LED strip scans for devices, saves one, tests colours and picks the controller family (ELK-BLEDOM 7E...EF or Triones/LEDBLE 56...AA; auto-detected from the writable GATT characteristic). A square Lighting button on Home opens the Lighting page: the car-interior line art (`lighting_lines.png`, tinted at runtime) takes the colour picked from the 14 dots along the bottom, which are also sent to the saved strip; Home itself carries no colour controls. Use `ANDROID_USER_HOME` above so the debug signing key matches the installed app and `adb install -r` works. Code: `LedStrip.kt`, `LedScannerDialog.kt`. **Hardware control is untested**: the scan works, but no strip was in range during development, and controllers allow one connection at a time, so close the iPhone app first.
+
+## Home extras
+
+- Screen timeout (Settings): Home dims to the centred Cadillac logo after 10 s to 5 min (`ScreenTimeout.kt`); a touch wakes it.
+- Auto-connect (Settings > Connection, on by default, `AutoConnect.kt`): connects to the saved iPhone when the app opens and when its Bluetooth link comes up, and retries 5/10/20/40 s (8 tries) after a failed or dropped session. Disconnect/Stop pauses it until Connect or the next Bluetooth link.
+- Top-centre clock and a link pill (Ready / Connecting / Connected / Reconnecting / Not connected) above the bottom line.
+- Logos are the supplied high-res PNGs (`cadillac_logo.png`, `cadillac_logo_name.png`); the splash still uses the GIF sheet.
 
 ## Known issues and open items
 
