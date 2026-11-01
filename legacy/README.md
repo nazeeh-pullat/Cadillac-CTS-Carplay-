@@ -4,6 +4,10 @@ This module reuses DiPlay's CarPlay engine with a small platform Android UI for
 32-bit Android 5.1 tablets. It is a development backport, not a supported DiPlay
 release. App launch alone does not establish successful CarPlay operation.
 
+The Cadillac CTS Dashboard layer (one-tap Connect over the tablet hotspot, auto-connect and retries, LED lighting page, screen
+timeout) is described in the repository [README](../README.md) and [HANDOFF](../HANDOFF.md). The notes below are the original
+engine-port scope and are partly superseded by it.
+
 ## Scope
 
 - Wired USB and experimental wireless over the existing Wi-Fi LAN, with explicit Start and Stop controls.

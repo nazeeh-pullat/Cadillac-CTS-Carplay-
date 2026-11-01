@@ -29,11 +29,20 @@ Android 5.1 host in `legacy/` and the tablet appliance setup in `tablet-setup/`.
   rate changes offer an app restart.
 - **Startup:** your own Cadillac splash animation (Full, Short or Off), pure black theme with a faint crest-colour
   line, and the app can be the tablet's Home app and open at boot.
+- **Auto-connect:** connects to the saved iPhone when the app opens and whenever its Bluetooth link comes up, and
+  retries (5, 10, 20, then 40 s, up to 8 tries) if a connection fails or drops. Switch it off in Settings > Connection.
+  A small pill at the bottom of Home shows Ready, Connecting, Connected, Reconnecting or Not connected.
+- **Clock and dim mode:** a thin clock and date sit at the top of Home. After a few seconds without a touch (10 s to
+  5 min, or never; set in Settings) everything fades to just the Cadillac logo, and a touch wakes it.
+- **Lighting:** the square button at the top left opens a page with car-interior line art that takes the colour you pick
+  from 14 dots. The same colour is sent to a Bluetooth LE LED strip (Lotus Lantern style ELK-BLEDOM or Triones
+  controllers) saved in Settings > LED strip; the scanner can be limited to nearby signals. LED control has not been
+  tested on real strip hardware yet.
 - **Light:** about 30 MB of RAM during a session; video runs at roughly 17 to 25 fps on this chip.
 
-| Resolution | Settings |
-| --- | --- |
-| ![Resolution](docs/cts/resolution.png) | ![Settings](docs/cts/settings.png) |
+| Lighting | Settings | Resolution |
+| --- | --- | --- |
+| ![Lighting](docs/cts/lighting.png) | ![Settings](docs/cts/settings.png) | ![Resolution](docs/cts/resolution.png) |
 
 ## Build
 
@@ -58,7 +67,8 @@ animation needs root, which this project does not provide or document.
 ## Status
 
 Verified on the Snook C70R (Android 5.1) with one iPhone: wireless CarPlay over the tablet hotspot, video, touch,
-fullscreen, hotspot restart, disconnect. **Not verified:** music and call audio, long sessions, other tablets or
+fullscreen, hotspot restart, disconnect, auto-connect on launch. **Not verified:** music and call audio, LED strip
+control on real hardware, reconnect retries in the car, long sessions, other tablets or
 iOS versions. A video decoder error can appear and recover when the app is sent to the background.
 
 ## Credits and licence

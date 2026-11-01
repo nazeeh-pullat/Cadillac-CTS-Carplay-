@@ -34,6 +34,9 @@ reveal its navigation controls.
 
 Settings has a Video section: resolution presets (640 � 384, 800 � 480 default, 1024 � 600 native, 1280 � 720 experimental) and frame rate (20, 24, 30 fps). Choices apply the next time CarPlay connects; touch is normalized, so every size maps correctly.
 
-Theme: pure black surfaces with a thin line in the crest colours (red, gold, silver, blue) near the bottom of Home and the splash. A faint sheen drifts along it and the line only animates while visible. The splash plays the owner-supplied GIF once, pre-scaled 2x with Lanczos for sharpness, then fades into Home. The Connect button reads Connect with the Apple logo and shows a turning arc with Connecting while the hotspot and iPhone link come up. Changing resolution or frame rate offers an app restart so the next connection uses it.
+Theme: pure black surfaces with a thin line in the crest colours (red, gold, silver, blue) near the bottom of Home and the splash. A faint sheen drifts along it and the line only animates while visible. The splash plays the owner-supplied GIF once, pre-scaled 2x with Lanczos for sharpness, then fades into Home. The Connect button reads Connect with the Apple logo and shows a turning arc with Connecting while the hotspot and iPhone link come up. Changing resolution or frame rate offers an app restart so the next connection uses it. Home also carries a thin champagne clock, a small link-status pill, an icon-only Lighting button (top left) and the
+settings gear (top right). The Lighting page tints the supplied line art with the chosen colour, and pages ease in with
+a short fade and slide. After the screen timeout Home fades to the centred logo (1.45x) under a 98 % black overlay.
+The logos are the supplied high-resolution PNGs; only the splash still plays the GIF.
 
 While CarPlay is connected or connecting, a small red icon-only box beside the Return button disconnects it. Settings > Startup animation chooses Full, Short or Off for the next launch.
