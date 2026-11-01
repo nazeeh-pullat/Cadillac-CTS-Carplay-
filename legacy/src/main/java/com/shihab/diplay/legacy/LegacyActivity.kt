@@ -62,6 +62,12 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var disconnectButton: ImageButton
     private lateinit var led: LedStrip
     private lateinit var ledSwatches: LinearLayout
+    private lateinit var gearButton: View
+    private lateinit var actionsRow: View
+    private lateinit var idleOverlay: View
+    private var idle = false
+    private var swallowGesture = false
+    private val idleRunnable = Runnable { enterIdle() }
     private var settingsOpen = false
     private var directHotspot = true
     private var carPlayActive = false
@@ -115,8 +121,10 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
 
     private fun createDashboard(): View {
         val pages = FrameLayout(this)
-        home = FrameLayout(this).apply { background = CadillacBackground() }
+        // Not clipping children lets the colour strips grow past their own bounds and cast their shadows.
+        home = FrameLayout(this).apply { background = CadillacBackground(); clipChildren = false }
         val gear = iconButton(R.drawable.ic_settings, "Settings") { openSettings() }
+        gearButton = gear
         (home as FrameLayout).addView(gear, FrameLayout.LayoutParams(dp(ICON_TARGET), dp(ICON_TARGET), Gravity.TOP or Gravity.END).apply {
             topMargin = dp(PAGE_PADDING); marginEnd = dp(PAGE_PADDING)
         })
@@ -151,6 +159,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         val gap = dp(BLOCK_GAP)
         val buttonWidth = minOf(CONNECT_WIDTH, resources.configuration.screenWidthDp - PAGE_PADDING * 2 - CONNECT_HEIGHT - BLOCK_GAP)
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        actionsRow = actions
         actions.addView(connectButton, LinearLayout.LayoutParams(dp(buttonWidth), -2))
         actions.addView(disconnectButton, LinearLayout.LayoutParams(dp(CONNECT_HEIGHT), dp(CONNECT_HEIGHT)).apply { marginStart = gap })
         hero.addView(actions, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(HERO_ACTION_GAP) })
@@ -159,6 +168,10 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         ledSwatches = buildLedSwatches()
         (home as FrameLayout).addView(ledSwatches, FrameLayout.LayoutParams(-2, -2, Gravity.START or Gravity.CENTER_VERTICAL))
         refreshLedSwatches()
+        // Dims everything under the logo while Home is idle; the logo is brought back in front of it.
+        idleOverlay = View(this).apply { setBackgroundColor(Color.BLACK); alpha = 0f; visibility = View.GONE }
+        (home as FrameLayout).addView(idleOverlay, FrameLayout.LayoutParams(-1, -1))
+        hero.bringToFront()
         if (LedModes.address(getSharedPreferences("legacy", MODE_PRIVATE)) != null) led.connect()
         settingsPage = createSettingsContent().apply { visibility = View.GONE }
         pages.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -174,7 +187,57 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         setOnClickListener { action() }
     }
 
+    private fun scheduleIdle() {
+        main.removeCallbacks(idleRunnable)
+        val seconds = ScreenTimeouts.get(getSharedPreferences("legacy", MODE_PRIVATE)).seconds
+        if (!destroyed && seconds > 0) main.postDelayed(idleRunnable, seconds * 1000L)
+    }
+
+    /** Home dims to the Cadillac logo alone, centred; Connect, Settings, the strips and the line fade away. */
+    private fun enterIdle() {
+        if (idle || destroyed || settingsOpen || dashboard.visibility != View.VISIBLE || home.visibility != View.VISIBLE) return
+        idle = true
+        idleOverlay.animate().cancel(); idleOverlay.visibility = View.VISIBLE
+        idleOverlay.animate().alpha(IDLE_DIM_ALPHA).setDuration(IDLE_FADE_MS).start()
+        for (view in listOf(gearButton, actionsRow)) {
+            view.animate().cancel()
+            view.animate().alpha(0f).setDuration(IDLE_FADE_MS).withEndAction { if (idle) view.visibility = View.GONE }.start()
+        }
+    }
+
+    private fun wakeFromIdle() {
+        idle = false
+        idleOverlay.animate().cancel()
+        idleOverlay.animate().alpha(0f).setDuration(WAKE_FADE_MS).withEndAction { if (!idle) idleOverlay.visibility = View.GONE }.start()
+        for (view in listOf(gearButton, actionsRow)) {
+            view.animate().cancel(); view.visibility = View.VISIBLE
+            view.animate().alpha(1f).setDuration(WAKE_FADE_MS).start()
+        }
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN && idle) { wakeFromIdle(); swallowGesture = true }
+        if (dashboard.visibility == View.VISIBLE) scheduleIdle()
+        if (swallowGesture) {
+            // The touch that wakes Home is not also a tap on whatever sits under the finger.
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) swallowGesture = false
+            return true
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        scheduleIdle()
+    }
+
+    override fun onPause() {
+        main.removeCallbacks(idleRunnable)
+        super.onPause()
+    }
+
     internal fun openSettings() {
+        main.removeCallbacks(idleRunnable)
         settingsOpen = true
         home.visibility = View.GONE
         settingsPage.visibility = View.VISIBLE
@@ -186,6 +249,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         settingsOpen = false
         settingsPage.visibility = View.GONE
         home.visibility = View.VISIBLE
+        scheduleIdle()
     }
 
     /** Prepares authentication off the main thread; returns a flag that turns true when it is done. */
@@ -242,17 +306,33 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     }
 
     /** The chosen strip sticks out furthest; the two strips either side of it step down towards the resting width. */
-    private fun swatchWidthDp(index: Int, selected: Int) = when (if (selected < 0) 3 else kotlin.math.abs(index - selected)) {
+    /** How far each strip sticks out, as a multiple of the resting width: the chosen one most, its neighbours less. */
+    private fun swatchScaleX(index: Int, selected: Int) = (when (if (selected < 0) 3 else kotlin.math.abs(index - selected)) {
         0 -> LED_BAR_SELECTED_WIDTH
         1 -> LED_BAR_NEIGHBOUR_WIDTH
         2 -> LED_BAR_SECOND_WIDTH
         else -> LED_BAR_WIDTH
-    }
+    }).toFloat() / LED_BAR_WIDTH
 
-    private fun swatchElevation(index: Int, selected: Int) = dp(if (index == selected) 8 else 4).toFloat()
+    /** The chosen strip is also taller, so it reads as lifted off the stack. */
+    private fun swatchScaleY(index: Int, selected: Int) = if (index == selected) 1.5f else 1f
+
+    private fun swatchElevation(index: Int, selected: Int) = dp(if (index == selected) 20 else 5).toFloat()
 
     private fun swatchBarHeightDp() =
-        minOf(44, (resources.configuration.screenHeightDp - LED_BAR_RESERVED) / LedModes.palette.size - LED_BAR_GAP)
+        minOf(44, ((resources.configuration.screenHeightDp - LED_BAR_RESERVED) / (LedModes.palette.size + 0.5f)).toInt() - LED_BAR_GAP)
+
+    /**
+     * Strips keep one fixed layout and only scale and rise, so a drag never reflows the stack and moves smoothly.
+     * Scaling pivots on the left edge (width) and the strip's own middle (height).
+     */
+    private fun styleSwatch(bar: View, index: Int, selected: Int, animate: Boolean) {
+        val scaleX = swatchScaleX(index, selected); val scaleY = swatchScaleY(index, selected); val lift = swatchElevation(index, selected)
+        bar.pivotX = 0f; bar.pivotY = dp(swatchBarHeightDp()) / 2f
+        bar.animate().cancel()
+        if (animate) bar.animate().scaleX(scaleX).scaleY(scaleY).translationZ(lift).setDuration(SWATCH_ANIMATION_MS).start()
+        else { bar.scaleX = scaleX; bar.scaleY = scaleY; bar.translationZ = lift }
+    }
 
     /**
      * Colours only, no text: strips stacked down the left edge of Home, shown once a strip is saved. The chosen one sticks
@@ -278,27 +358,22 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
                 addView(View(this@LegacyActivity).apply {
                     contentDescription = "LED ${color.name}"; isClickable = true
                     background = swatchBackground(color)
-                    elevation = swatchElevation(index, selected)
+                    elevation = dp(1).toFloat()
+                    styleSwatch(this, index, selected, false)
                     setOnClickListener { pickLed(index) }
-                }, LinearLayout.LayoutParams(dp(swatchWidthDp(index, selected)), dp(height)).apply {
+                }, LinearLayout.LayoutParams(dp(LED_BAR_WIDTH), dp(height)).apply {
                     topMargin = dp(LED_BAR_GAP) / 2; bottomMargin = dp(LED_BAR_GAP) - dp(LED_BAR_GAP) / 2
                 })
             }
         }
     }
 
-    private fun refreshLedSwatches() {
+    private fun refreshLedSwatches(animate: Boolean = true) {
         val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
         ledSwatches.visibility = if (LedModes.address(prefs) != null) View.VISIBLE else View.GONE
         val selected = LedModes.colorIndex(prefs)
-        LedModes.palette.forEachIndexed { index, color ->
-            val bar = ledSwatches.getChildAt(index)
-            bar.background = swatchBackground(color)
-            bar.elevation = swatchElevation(index, selected)
-            bar.layoutParams = (bar.layoutParams as LinearLayout.LayoutParams).apply { width = dp(swatchWidthDp(index, selected)) }
-        }
+        LedModes.palette.forEachIndexed { index, _ -> styleSwatch(ledSwatches.getChildAt(index), index, selected, animate) }
     }
-
     private fun pickLed(index: Int) {
         val color = LedModes.palette[index]
         LedModes.saveColor(getSharedPreferences("legacy", MODE_PRIVATE), index)
@@ -464,6 +539,15 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         val startupPrefs = getSharedPreferences("legacy", MODE_PRIVATE)
         val startupRow = row("Startup animation", startupDetail(startupPrefs)) { }
         startupRow.setOnClickListener { chooseStartupAnimation { startupRow.text = rowCopy("Startup animation", startupDetail(startupPrefs)) } }
+        fun timeoutDetail() = "${ScreenTimeouts.get(startupPrefs).label} · Home dims to the Cadillac logo until touched"
+        val timeoutRow = row("Screen timeout", timeoutDetail()) { }
+        timeoutRow.setOnClickListener {
+            val choices = ScreenTimeout.values()
+            AlertDialog.Builder(this).setTitle("Screen timeout")
+                .setSingleChoiceItems(choices.map { it.label }.toTypedArray<CharSequence>(), choices.indexOf(ScreenTimeouts.get(startupPrefs))) { dialog, which ->
+                    ScreenTimeouts.save(startupPrefs, choices[which]); timeoutRow.text = rowCopy("Screen timeout", timeoutDetail()); dialog.dismiss()
+                }.setNegativeButton("Cancel", null).show()
+        }
         section("Video")
         val videoPrefs = getSharedPreferences("legacy", MODE_PRIVATE)
         val resolutionRow = row("Resolution", resolutionDetail(videoPrefs)) { }
@@ -524,6 +608,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
 
     private fun showDashboard(show: Boolean) {
         dashboard.visibility = if (show) View.VISIBLE else View.GONE
+        if (show) scheduleIdle() else main.removeCallbacks(idleRunnable)
         enterImmersiveMode()
     }
 
@@ -1035,10 +1120,14 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val SPLASH_HOLD_MS = 500L
         private const val SPLASH_SHORT_HOLD_MS = 150L
         private const val LINE_HEIGHT = 24
-        private const val LED_BAR_WIDTH = 34
-        private const val LED_BAR_SELECTED_WIDTH = 70
-        private const val LED_BAR_NEIGHBOUR_WIDTH = 55
-        private const val LED_BAR_SECOND_WIDTH = 44
+        private const val LED_BAR_WIDTH = 44
+        private const val LED_BAR_SELECTED_WIDTH = 100
+        private const val LED_BAR_NEIGHBOUR_WIDTH = 74
+        private const val LED_BAR_SECOND_WIDTH = 58
+        private const val IDLE_DIM_ALPHA = 0.82f
+        private const val IDLE_FADE_MS = 900L
+        private const val SWATCH_ANIMATION_MS = 110L
+        private const val WAKE_FADE_MS = 200L
         private const val LED_BAR_RESERVED = 24
         private const val LED_BAR_GAP = 2
         private const val LINE_MARGIN = 36
