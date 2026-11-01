@@ -50,6 +50,15 @@ class LedModesTest {
         assertNull(LedModes.address(prefs)); assertEquals(-1, LedModes.colorIndex(prefs))
     }
 
+    @Test fun scanRangeDefaultsToAnyAndSurvivesForget() {
+        prefs.edit().clear().commit()
+        assertEquals(LedScanRange.ANY, LedModes.scanRange(prefs))
+        LedModes.saveScanRange(prefs, LedScanRange.CLOSE)
+        LedModes.saveStrip(prefs, "AA:BB:CC:DD:EE:FF", "x"); LedModes.forget(prefs)
+        assertEquals(LedScanRange.CLOSE, LedModes.scanRange(prefs))
+        assertTrue(LedScanRange.values().map { it.minRssi }.zipWithNext().all { (a, b) -> a < b })
+    }
+
     @Test fun paletteEndsWithOffAndHasNoText() {
         assertEquals("off", LedModes.palette.last().name)
         assertTrue(LedModes.palette.size >= 8)

@@ -411,6 +411,15 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
             LedScannerDialog(this, ledPrefs) { led.close(); led.connect(); refreshLedSwatches(); ledRow.text = rowCopy("LED strip", ledDetail(ledPrefs)) }.show()
         }
         led.onChange = { ledRow.text = rowCopy("LED strip", ledDetail(ledPrefs)) }
+        fun rangeDetail() = "${LedModes.scanRange(ledPrefs).label} · hold the tablet near the strip and pick Close to find it"
+        val rangeRow = row("Scan signal range", rangeDetail()) { }
+        rangeRow.setOnClickListener {
+            val ranges = LedScanRange.values()
+            AlertDialog.Builder(this).setTitle("Scan signal range")
+                .setSingleChoiceItems(ranges.map { "${it.label}\n${it.note}" }.toTypedArray<CharSequence>(), ranges.indexOf(LedModes.scanRange(ledPrefs))) { dialog, which ->
+                    LedModes.saveScanRange(ledPrefs, ranges[which]); rangeRow.text = rowCopy("Scan signal range", rangeDetail()); dialog.dismiss()
+                }.setNegativeButton("Cancel", null).show()
+        }
         row("Test colours", "Cycle red, green and blue on the saved strip") { testLed() }
         val protocolRow = row("Controller type", "${LedModes.protocol(ledPrefs).label} · change if the colours do not match") { }
         protocolRow.setOnClickListener { chooseLedProtocol { protocolRow.text = rowCopy("Controller type", "${LedModes.protocol(ledPrefs).label} · change if the colours do not match") } }

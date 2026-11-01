@@ -19,6 +19,14 @@ internal enum class LedProtocol(val label: String) {
     TRIONES("Triones / LEDBLE family (56 … AA)"),
 }
 
+/** How strong a Bluetooth signal a device needs to be listed while scanning; hold the tablet near the strip to find it. */
+internal enum class LedScanRange(val label: String, val note: String, val minRssi: Int) {
+    ANY("Any signal", "Every device in range, including weak ones", -127),
+    NEAR("Nearby", "A few metres, about one room", -80),
+    CLOSE("Close", "Within about a metre or two", -65),
+    TOUCHING("Very close", "Hold the tablet right next to the strip", -50),
+}
+
 internal data class LedColor(val name: String, val red: Int, val green: Int, val blue: Int) {
     val argb get() = (0xff shl 24) or (red shl 16) or (green shl 8) or blue
 }
@@ -68,6 +76,10 @@ internal object LedModes {
     fun protocol(prefs: SharedPreferences): LedProtocol =
         LedProtocol.values().firstOrNull { it.name == prefs.getString(KEY_PROTOCOL, null) } ?: LedProtocol.AUTO
     fun colorIndex(prefs: SharedPreferences): Int = prefs.getInt(KEY_COLOR, -1).takeIf { it in palette.indices } ?: -1
+
+    fun scanRange(prefs: SharedPreferences): LedScanRange =
+        LedScanRange.values().firstOrNull { it.name == prefs.getString("led_scan_range", null) } ?: LedScanRange.ANY
+    fun saveScanRange(prefs: SharedPreferences, value: LedScanRange) { prefs.edit().putString("led_scan_range", value.name).apply() }
 
     fun saveStrip(prefs: SharedPreferences, address: String, name: String?) {
         prefs.edit().putString(KEY_ADDRESS, address).putString(KEY_NAME, name ?: "LED strip").apply()

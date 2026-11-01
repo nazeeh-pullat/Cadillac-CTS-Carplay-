@@ -90,8 +90,12 @@ internal class LedScannerDialog(
 
     private fun render() {
         list.removeAllViews()
-        val entries = found.values.sortedWith(compareByDescending<Found> { looksLikeLedStrip(it.name) }.thenByDescending { it.rssi })
-        header.text = (if (scanning) "Scanning… " else "Scan finished. ") + "${entries.size} device(s). Tap your LED strip to save it."
+        val range = LedModes.scanRange(prefs)
+        val entries = found.values.filter { it.rssi >= range.minRssi }
+            .sortedWith(compareByDescending<Found> { it.rssi }.thenByDescending { looksLikeLedStrip(it.name) })
+        val hidden = found.size - entries.size
+        header.text = (if (scanning) "Scanning… " else "Scan finished. ") + "${entries.size} device(s) · range: ${range.label}" +
+            (if (hidden > 0) " ($hidden weaker hidden)" else "") + ". Strongest first; tap your LED strip to save it."
         for (entry in entries.take(40)) {
             val likely = looksLikeLedStrip(entry.name)
             val row = Button(activity).apply {
