@@ -38,11 +38,14 @@ internal object LedModes {
 
     /** The swatches shown on Home; the last one switches the lights off. */
     val palette = listOf(
-        LedColor("red", 255, 0, 0), LedColor("orange", 255, 90, 0), LedColor("amber", 255, 170, 0),
-        LedColor("green", 0, 255, 40), LedColor("cyan", 0, 210, 255), LedColor("blue", 0, 70, 255),
-        LedColor("purple", 150, 0, 255), LedColor("pink", 255, 0, 140), LedColor("white", 255, 255, 255),
-        LedColor("off", 0, 0, 0),
+        LedColor("red", 255, 0, 0), LedColor("orange", 255, 80, 0), LedColor("amber", 255, 160, 0),
+        LedColor("yellow", 255, 235, 0), LedColor("lime", 140, 255, 0), LedColor("green", 0, 255, 40),
+        LedColor("teal", 0, 255, 160), LedColor("cyan", 0, 210, 255), LedColor("blue", 0, 70, 255),
+        LedColor("purple", 150, 0, 255), LedColor("pink", 255, 0, 140), LedColor("warm white", 255, 190, 110),
+        LedColor("white", 255, 255, 255), LedColor("off", 0, 0, 0),
     )
+
+    fun named(name: String) = palette.first { it.name == name }
 
     /** Picks the command family from the writable characteristics a controller offers. */
     fun detect(writable: Collection<UUID>): LedProtocol? = when {

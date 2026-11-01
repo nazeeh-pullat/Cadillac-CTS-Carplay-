@@ -244,13 +244,25 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private fun swatchBarHeightDp() =
-        minOf(30, ((resources.configuration.screenHeightDp - LED_BAR_RESERVED) / (LedModes.palette.size * 1.25f)).toInt())
+        minOf(44, (resources.configuration.screenHeightDp - LED_BAR_RESERVED) / LedModes.palette.size - LED_BAR_GAP)
 
-    /** Colours only, no text: strips stacked down the left edge of Home, shown once a strip is saved. The chosen one sticks out further. */
+    /**
+     * Colours only, no text: strips stacked down the left edge of Home, shown once a strip is saved. The chosen one sticks
+     * out further. Tapping a strip picks it, and sliding a finger up or down the edge picks whichever strip it is over.
+     */
     private fun buildLedSwatches(): LinearLayout {
         val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
         val height = swatchBarHeightDp()
-        return LinearLayout(this).apply {
+        return object : LinearLayout(this) {
+            override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_MOVE) {
+                    val index = (0 until childCount).firstOrNull { event.y < getChildAt(it).bottom + dp(LED_BAR_GAP) / 2f } ?: (childCount - 1)
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                    if (index != LedModes.colorIndex(prefs)) pickLed(index)
+                }
+                return true
+            }
+        }.apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.START or Gravity.CENTER_VERTICAL
             LedModes.palette.forEachIndexed { index, color ->
                 addView(View(this@LegacyActivity).apply {
@@ -258,7 +270,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
                     background = swatchBackground(color, index == LedModes.colorIndex(prefs))
                     setOnClickListener { pickLed(index) }
                 }, LinearLayout.LayoutParams(dp(if (index == LedModes.colorIndex(prefs)) LED_BAR_SELECTED_WIDTH else LED_BAR_WIDTH), dp(height)).apply {
-                    topMargin = dp(height / 5); bottomMargin = dp(height / 5)
+                    topMargin = dp(LED_BAR_GAP) / 2; bottomMargin = dp(LED_BAR_GAP) - dp(LED_BAR_GAP) / 2
                 })
             }
         }
@@ -285,7 +297,7 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
     private fun testLed() {
         val prefs = getSharedPreferences("legacy", MODE_PRIVATE)
         if (LedModes.address(prefs) == null) { Toast.makeText(this, "Find your LED strip first.", Toast.LENGTH_LONG).show(); return }
-        val steps = listOf(LedModes.palette[0], LedModes.palette[3], LedModes.palette[5])
+        val steps = listOf(LedModes.named("red"), LedModes.named("green"), LedModes.named("blue"))
         steps.forEachIndexed { i, c -> main.postDelayed({ if (!destroyed) led.setColor(c.red, c.green, c.blue) }, i * 900L) }
         main.postDelayed({
             if (destroyed) return@postDelayed
@@ -1013,7 +1025,8 @@ class LegacyActivity : Activity(), SurfaceHolder.Callback {
         private const val LINE_HEIGHT = 24
         private const val LED_BAR_WIDTH = 34
         private const val LED_BAR_SELECTED_WIDTH = 70
-        private const val LED_BAR_RESERVED = 120
+        private const val LED_BAR_RESERVED = 24
+        private const val LED_BAR_GAP = 2
         private const val LINE_MARGIN = 36
         private const val SPLASH_MAX_MS = 8000L
         private const val SPLASH_WORDMARK_WIDTH = 224
